@@ -6,17 +6,39 @@ def main():
 
 ####################################################################################################################################
 
-def create_ui( pWindowName ):
-    windowID = 'squashStretchSystemGenerator'
-
-
+def create_ui(pWindowTitle):
+    windowID = 'hello'
+    
+    # Check if the window exists
     if cmds.window( windowID, exists=True ):
         cmds.deleteUI( windowID )
 
-    window = cmds.window( windowID, title=pWindowName, widthHeight=(320, 410) )
+    window = cmds.window( windowID, title=pWindowTitle, sizeable=True )
+    cmds.columnLayout( adj=True )
 
-    cmds.columnLayout( adjustableColumn=True )
+    # First row ####################
+    cmds.text( label='EXISTING JOINT CHAIN', font='boldLabelFont' )
 
+    # Second row ####################
+    cmds.rowLayout( adj=2, numberOfColumns=3 )
+    cmds.text( label='first' )
+    originParentField = cmds.textField( pht='Origin Parent Joint', ed=True )
+    cmds.button( label='Select', command=functools.partial( get_selection, originParentField ) )
+
+    cmds.setParent( '..' )
+
+    # Third row ####################
+    cmds.rowLayout( adj=2, numberOfColumns=3 )
+    cmds.text( label='second' )
+    insertionParentField = cmds.textField( pht='Insertion Parent Joint', ed=True )
+    cmds.button( label='Select', command=functools.partial( get_selection, insertionParentField ) )
+    
+    cmds.setParent( '..' )
+    
+    # Fourth row ####################
+    cmds.button( label='Generate', command=functools.partial( create_stretchy_system, 
+                                                              'test' ) ) #change this after create_stretchy_system edits
+    #cmds.button( label='Help', command=functools.partial( display_Help_UI ) )
 
     # NEW JOINT CHAIN ---------------------------------------------
     # FIRST ROW ---------------------------
