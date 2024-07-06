@@ -1,22 +1,93 @@
 import maya.cmds as cmds
+import functools
 
 def main():
-    jointList = cmds.ls( orderedSelection=True, type='joint' )
-    create_stretchy_system( jointList )
+    create_ui("MyWindowName")
 
 ####################################################################################################################################
 
 def create_ui( pWindowName ):
-    # This function will create the formatted GUI for our script
+    windowID = 'squashStretchSystemGenerator'
+
+
+    if cmds.window( windowID, exists=True ):
+        cmds.deleteUI( windowID )
+
+    window = cmds.window( windowID, title=pWindowName, widthHeight=(320, 410) )
+
+    cmds.columnLayout( adjustableColumn=True )
+
+
+    # NEW JOINT CHAIN ---------------------------------------------
+    # FIRST ROW ---------------------------
+    cmds.separator( height=10 )
+
+    # SECOND ROW --------------------------
+    cmds.text( label='CREATE NEW STRETCHY JOINT CHAIN', font='boldLabelFont' )
+
+    # THIRD ROW ---------------------------
+    cmds.separator( style='none', height=10 )
+    cmds.text( label='1. Placement Locator')
+    
+
+    # FOURTH ROW --------------------------
+    cmds.button( label='Create and Set Placement Locators', command = functools.partial(create_placement_locators,
+                                                                                        'JOINT_NAMES')  )
+
+    # FIFTH ROW ---------------------------
+    cmds.separator( style='none', height=10 )
+    cmds.text( label='2. How Many Segments?')
+    
+
+    # SIXTH ROW ---------------------------
+    cmds.setParent( '..' )
+    cmds.rowLayout( adj=3, numberOfColumns=6 )
+    cmds.text( label='Segment Count:')
+    genJointCount = cmds.textField( pht="#", editable=True, aie=True )
+    cmds.separator( style='none', height=10 )
+    cmds.text( label= 'Parent Joint:' )
+    genJointParent = cmds.textField( pht="Parent Joint", editable=True, aie=True )
+    cmds.button(label='Select', command = functools.partial(select_object,
+                                                            genJointParent))
+    
+    # SEVENTH ROW -------------------------
+    cmds.setParent( '..' )
+    cmds.separator( style='none', height=10 )
+    cmds.text(label='3. Create System')
+
+    # EIGHTH ROW --------------------------
+    cmds.button( label='Generate', command= functools.partial (create_jointchain_at_locators,
+                                                               'arg1', 'arg2', 'arg3' ))
+                                                           
+    # NINTH ROW ---------------------------
+    cmds.separator( style='none', height=10 )
+    cmds.separator( height=10 ) 
+                                                              
+    cmds.showWindow( window )
+
+####################################################################################################################################
+
+def get_selection(*pArgs):
+    selection = cmds.ls( selection=True, type=objType)
+        
+    if selection:
+        cmds.textField( pField, edit=True, text=selection[0] )
+    else:
+        cmds.error( f"No {objType} selected!", n=True )
 
 ####################################################################################################################################
 
 def delete_stretchy_system( pStretchyGroup ):
+    print('hello')
     # This function will create the formatted GUI for our script
 
 ####################################################################################################################################
+def create_stretchy_system( pTextField1, pTextField2, *pArgs ):
 
-def create_stretchy_system( pJointList, *pArgs ):
+    firstJoint = cmds.textField( pTextField, query=True, text=True )
+    lastJoint = cmds.textField( pTextField, query=True, text=True )
+
+    pJointList = # find every joint btwn
 
     if (len(pJointList) >= 3):
         #if the grp already exists, delete it
