@@ -1,15 +1,22 @@
 import maya.cmds as cmds
 
 def main():
-    #MAIN BODY CODE GOES HERE!
-    #SELECT THE JOINTS IN ORDER OF START, MIDDLE, END
     jointList = cmds.ls( orderedSelection=True, type='joint' )
-
     create_stretchy_system( jointList )
 
 ####################################################################################################################################
 
-def create_stretchy_system( pJointList ):
+def create_ui( pWindowName ):
+    # This function will create the formatted GUI for our script
+
+####################################################################################################################################
+
+def delete_stretchy_system( pStretchyGroup ):
+    # This function will create the formatted GUI for our script
+
+####################################################################################################################################
+
+def create_stretchy_system( pJointList, *pArgs ):
 
     if (len(pJointList) >= 3):
         #if the grp already exists, delete it
@@ -117,7 +124,7 @@ def create_stretchy_system( pJointList ):
 
 ####################################################################################################################################
 
-def create_placement_locators( pName ):
+def create_placement_locators( pName, *pArgs ):
     # Set the scale of the locators and the translation of the last locator
     scaleValue = 10
     translateValue = [ 0, 100, 0 ]
@@ -151,7 +158,7 @@ def create_placement_locators( pName ):
 
 ####################################################################################################################################
 
-def create_jointchain_at_locators( pName, pFirstPL, pLastPL, pMiddlePL ):
+def create_jointchain_at_locators( pName, pFirstPL, pLastPL, pMiddlePL, *pArgs ):
 
     # Get the location and rotation of the locators
     firstLoc = cmds.xform( pFirstPL, query=True, translation=True, ws=True )
@@ -183,6 +190,8 @@ def create_jointchain_at_locators( pName, pFirstPL, pLastPL, pMiddlePL ):
     
     print( f"deleting {parentGroup[0]}" )
     cmds.delete( parentGroup[0] )
+
+    create_stretchy_system( jointList )
 
 ####################################################################################################################################
 # MAIN
