@@ -6,7 +6,11 @@ def main():
 
 ####################################################################################################################################
 
+<<<<<<< HEAD
 def create_UI(pWindowTitle):
+=======
+def create_ui(pWindowTitle):
+>>>>>>> afc0272ee7b4f02162e0dc2667fd0107d00cdd61
     windowID = 'hello'
     
     # Check if the window exists
