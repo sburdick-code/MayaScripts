@@ -6,11 +6,8 @@ def main():
 
 ####################################################################################################################################
 
-<<<<<<< HEAD
-def create_UI(pWindowTitle):
-=======
 def create_ui(pWindowTitle):
->>>>>>> afc0272ee7b4f02162e0dc2667fd0107d00cdd61
+
     windowID = 'hello'
     
     # Check if the window exists
@@ -44,56 +41,69 @@ def create_ui(pWindowTitle):
                                                               'test' ) ) #change this after create_stretchy_system edits
     #cmds.button( label='Help', command=functools.partial( display_Help_UI ) )
 
-    # NEW JOINT CHAIN ---------------------------------------------
-    # FIRST ROW ---------------------------
+        # NEW JOINT CHAIN ---------------------------------------------
+    # ROW 01 ---------------------------
     cmds.separator( height=10 )
 
-    # SECOND ROW --------------------------
+    # ROW 02 ---------------------------
     cmds.text( label='CREATE NEW STRETCHY JOINT CHAIN', font='boldLabelFont' )
 
-    # THIRD ROW ---------------------------
+    # ROW 03 ---------------------------
     cmds.separator( style='none', height=10 )
-    cmds.text( label='1. Placement Locator')
     
-
-    # FOURTH ROW --------------------------
-    cmds.button( label='Create and Set Placement Locators', command = functools.partial(create_placement_locators,
-                                                                                        'JOINT_NAMES')  )
-
-    # FIFTH ROW ---------------------------
-    cmds.separator( style='none', height=10 )
-    cmds.text( label='2. How Many Segments?')
+    # ROW 04 ---------------------------
+    cmds.text( label='1. Parameters')
     
-
-    # SIXTH ROW ---------------------------
+    # ROW 05 ---------------------------
+    cmds.rowLayout( adj=3, numberOfColumns=4 )
+    cmds.separator( style='none', height=10, width=30 )
+    cmds.text( label= 'Name:' )
+    genNameTextField = cmds.textField( pht="Joint Names", editable=True, aie=True )
+    cmds.separator( style='none', height=10, width=30 )
+    
+    # ROW 06 --------------------------
     cmds.setParent( '..' )
     cmds.rowLayout( adj=3, numberOfColumns=6 )
     cmds.text( label='Segment Count:')
-    genJointCount = cmds.textField( pht="#", editable=True, aie=True )
+    genJointCountField = cmds.textField( pht="#", editable=True, aie=True )
     cmds.separator( style='none', height=10 )
     cmds.text( label= 'Parent Joint:' )
-    genJointParent = cmds.textField( pht="Parent Joint", editable=True, aie=True )
-    cmds.button(label='Select', command = functools.partial(select_object,
-                                                            genJointParent))
+    genJointParentField = cmds.textField( pht="Parent Joint", editable=True, aie=True )
+    cmds.button(label='Select', command=functools.partial( get_selection,
+                                                           genJointParentField, 'joint' ) )
     
-    # SEVENTH ROW -------------------------
+    # ROW 07 --------------------------
     cmds.setParent( '..' )
     cmds.separator( style='none', height=10 )
+    
+    # ROW 08 --------------------------
+    cmds.text( label='2. Placement Locators')
+    
+    # ROW 09 --------------------------
+    cmds.button( label='Create and Set Placement Locators', command=functools.partial( create_placement_locators,
+                                                                                       genNameTextField, genJointCountField, genJointParentField ) )
+
+    # ROW 10 --------------------------
+    cmds.separator( style='none', height=10 )
+    
+    # ROW 11 --------------------------
     cmds.text(label='3. Create System')
 
-    # EIGHTH ROW --------------------------
-    cmds.button( label='Generate', command= functools.partial (create_jointchain_at_locators,
-                                                               'arg1', 'arg2', 'arg3' ))
+    # ROW 12 --------------------------
+    cmds.button( label='Generate', command=functools.partial( create_jointchain_at_locators,
+                                                              genNameTextField, genJointCountField, genJointParentField ) )
                                                            
-    # NINTH ROW ---------------------------
+    # ROW 13 ---------------------------
     cmds.separator( style='none', height=10 )
-    cmds.separator( height=10 ) 
+    
+    # ROW 14 ---------------------------
+    cmds.separator( height=10 )  
                                                               
     cmds.showWindow( window )
 
 ####################################################################################################################################
 
-def get_selection(*pArgs):
+def get_selection( pField, objType, *pArgs):
     selection = cmds.ls( selection=True, type=objType)
         
     if selection:
@@ -108,12 +118,13 @@ def delete_stretchy_system( pStretchyGroup ):
     # This function will create the formatted GUI for our script
 
 ####################################################################################################################################
+
 def create_stretchy_system( pTextField1, pTextField2, *pArgs ):
 
     firstJoint = cmds.textField( pTextField, query=True, text=True )
     lastJoint = cmds.textField( pTextField, query=True, text=True )
 
-    pJointList = # find every joint btwn
+    pJointList = [] # find every joint btwn
 
     if (len(pJointList) >= 3):
         #if the grp already exists, delete it
@@ -221,21 +232,46 @@ def create_stretchy_system( pTextField1, pTextField2, *pArgs ):
 
 ####################################################################################################################################
 
-def create_placement_locators( pName, *pArgs ):
+def create_placement_locators( pNameField, pNumberField, pParentJoint, *pArgs ):
+
+    # Check if all parameters are filled
+    if not( ( cmds.textField(pNameField, query=True, text=True) )and( int(cmds.textField( pNumberField, query=True, text=True )) > 0 )and( cmds.textField(pParentJoint, query=True, text=True) ) ):
+        cmds.error("Parameters not valid", n=True)
+        return 0
+    elif not( cmds.objExists( cmds.textField(pParentJoint, query=True, text=True) ) ):
+        cmds.error("No valid parent joint parameter", n=True)
+        return 0
+
     # Set the scale of the locators and the translation of the last locator
-    scaleValue = 10
+    scaleValue = 1
     translateValue = [ 0, 100, 0 ]
+    number = int(cmds.textField( pNumberField, query=True, text=True ))
+    pName = cmds.textField( pNameField, query=True, text=True )
 
     # Create the locator system and scale them up
     firstPL = cmds.spaceLocator( name = pName + "_firstPlacement" ) 
     cmds.scale( scaleValue, scaleValue, scaleValue, firstPL )
     firstGroup = cmds.group( name = pName + "_first_off" )
-    middlePL = cmds.spaceLocator( name = pName + "_middlePlacement" )
-    cmds.scale( scaleValue, scaleValue, scaleValue, middlePL )
+    middlePLList=[]
     middleGroup = cmds.group( name = pName + "_middle_off" )
     lastPL = cmds.spaceLocator( name = pName + "_lastPlacement" )
     cmds.scale( scaleValue, scaleValue, scaleValue, lastPL )
     lastGroup = cmds.group( name = pName + "_last_off" )
+
+
+
+    if number > 0:
+        for i in range( number ):
+            middlePL = cmds.spaceLocator( name = pName + "_middlePlacement_" + str(i).zfill(2) )
+            cmds.scale( scaleValue, scaleValue, scaleValue, middlePL )
+            middlePLList.append( middlePL )
+            cmds.parent( middlePL, middleGroup )
+    else:
+        cmds.error( "Invalid number of joints to create!", n=True )
+        return 0
+
+    print( middlePLList )
+
 
     # Constrain the middle locator's offset group to follow in between the origin and insertion locators
     cmds.parentConstraint( firstPL, middleGroup)
@@ -250,33 +286,61 @@ def create_placement_locators( pName, *pArgs ):
     cmds.parent( lastGroup, locatorGroup )
     cmds.parent( middleGroup, locatorGroup )
 
-    #Return the locators
-    return firstPL, lastPL, middlePL
+    cmds.select(clear=True)
+    successGroup = cmds.group( name= pName + "_SuccessGroup", empty=True )
+    cmds.parent( successGroup, locatorGroup )
 
 ####################################################################################################################################
 
-def create_jointchain_at_locators( pName, pFirstPL, pLastPL, pMiddlePL, *pArgs ):
+def create_jointchain_at_locators( pNameField, pNumberField, pParentJoint, *pArgs ):
 
-    # Get the location and rotation of the locators
+    if not( cmds.objExists( (cmds.textField( pNameField, query=True, text=True )) + "_SuccessGroup" ) ):
+        cmds.error("Locators Not Created!", n=True)
+        return 0
+
+    pName = cmds.textField( pNameField, query=True, text=True )
+    number = int(cmds.textField( pNumberField, query=True, text=True ))
+    parentJoint = cmds.textField( pParentJoint, query=True, text=True )
+
+    pFirstPL = pName + "_firstPlacement"
+    pLastPL = pName + "_lastPlacement"
+    pMiddleList = cmds.listRelatives( pName + "_middle_off")
+
+    # Get the location of locators
     firstLoc = cmds.xform( pFirstPL, query=True, translation=True, ws=True )
-    middleLoc = cmds.xform( pMiddlePL, query=True, translation=True, ws=True )
     lastLoc = cmds.xform( pLastPL, query=True, translation=True, ws=True )
 
-    translationList = [ firstLoc, middleLoc, lastLoc ]
+    middleLocList = []
+    translationList = [ firstLoc ]
+    for i in range( number ):
+        translationList.append( cmds.xform( pMiddleList[i], query=True, translation=True, ws=True ) )
 
+    translationList.append( lastLoc )
+
+    # Get the rotation of locators
     firstRot = cmds.xform( pFirstPL, query=True, rotation=True, ws=True )
-    middleRot = cmds.xform( pMiddlePL, query=True, rotation=True, ws=True )
     lastRot = cmds.xform( pLastPL, query=True, rotation=True, ws=True )
 
-    rotationList = [ firstRot, middleRot, lastRot ]
+    middleRotList = []
+    rotationList = [ firstRot ]
+    for i in range( number ):
+        rotationList.append( cmds.xform( pMiddleList[i], query=True, rotation=True, ws=True ) )
+
+    rotationList.append( lastRot )
 
     # Create the joints
     cmds.select( cl=True )
-    firstJoint = cmds.joint( name=pName + "_01")
-    middleJoint = cmds.joint( name=pName + "_02")
-    lastJoint = cmds.joint( name=pName + "_03")
+    middleJointList = []
 
-    jointList = [ firstJoint, middleJoint, lastJoint ]
+    firstJoint = cmds.joint( name=pName + "_01" )
+    jointList = [ firstJoint ]
+
+    for i in range( number ):
+        jointList.append( cmds.joint( name=pName + "_" + str(i+2).zfill(2) ) )
+
+    lastJoint = cmds.joint( name=pName + "_" + str(number + 2).zfill(2) )
+
+    jointList.append( lastJoint )
 
     # Move the joints to the proper location
     for num in range( len(jointList) ):
@@ -288,7 +352,9 @@ def create_jointchain_at_locators( pName, pFirstPL, pLastPL, pMiddlePL, *pArgs )
     print( f"deleting {parentGroup[0]}" )
     cmds.delete( parentGroup[0] )
 
-    create_stretchy_system( jointList )
+    cmds.parent( firstJoint, parentJoint )
+
+    #create_stretchy_system( jointList )
 
 ####################################################################################################################################
 # MAIN
