@@ -189,11 +189,6 @@ def create_stretchy_system( pTextField1, pTextField2, *pArgs ):
         ## Parent constrain joint under control
         cmds.parentConstraint( newControl, jnt )
     
-    '''    
-    #PARENT CONSTRAIN THE MIDDLE CONTROLLER OFFSET GROUP TO THE START AND END CONTROLLERS
-    cmds.parentConstraint( controlCurveList[0], controlCurveList[-1], pJointList[1]+'_offset' )
-    '''
-    
     #PARENT CONSTRAIN THE MIDDLE CONTROLLER OFFSET GROUPS TO THEIR ADJACENT CONTROLLERS
     for x in range( len( pJointList ) ) :
         if pJointList[x] == firstJoint or pJointList[x] == lastJoint:
@@ -223,23 +218,89 @@ def create_stretchy_system( pTextField1, pTextField2, *pArgs ):
     cmds.parentConstraint( controlCurveList[0], helperJoints[0] )
     cmds.parentConstraint( controlCurveList[-1], helperJoints[-1] )
     
+    #CREATE MIDDLE DRIVER LOC
+    #place a locator between the first and last joint
+    cmds.spaceLocator( n="Loc_M" ) #create locator
+    cmds.group( "Loc_M", n='Loc_M_offset' )
+    cmds.parentConstraint( firstJoint, lastJoint, 'Loc_M_offset' )
+    
+    
     #CREATE THE SCALE EXPRESSIONS
     
-    middleOffCtrl = pJointList[1]+'_offset'
     statement = "$peak / pow(1 + $blend * $dist, 2)"
     
-    cmds.expression( object = middleOffCtrl, string = f" float $dist = abs({helperJoints[-1]}.translateX) + abs({helperJoints[-1]}.translateY) + abs({helperJoints[-1]}.translateZ); float $peak = 6; float $blend = .6; {middleOffCtrl}.scaleX = {statement}; {middleOffCtrl}.scaleY = {statement}; {middleOffCtrl}.scaleZ = {statement};" )
+    cmds.expression( object = 'Loc_M_offset', string = f" float $dist = abs({helperJoints[-1]}.translateX) + abs({helperJoints[-1]}.translateY) + abs({helperJoints[-1]}.translateZ); float $peak = 6; float $blend = .6; Loc_M_offset.scaleX = {statement}; Loc_M_offset.scaleY = {statement}; Loc_M_offset.scaleZ = {statement};" )
     
-    #scale constraint the middle joint to the controller
-    cmds.scaleConstraint( pJointList[1]+"_ctrl", pJointList[1], mo = True)
+    #scale constraint the middle joints to their controller
+    for jnt in pJointList:
+        if jnt == firstJoint or jnt == lastJoint:
+            continue
+        cmds.scaleConstraint( jnt+'_ctrl', jnt, mo=True )
+  
+    centerJoint = []
+    
+    for jnt in pJointList: #scale constrain all the joints to their controllers
+        cmds.scaleConstraint( jnt+'_ctrl', jnt, mo = True)
+        
+    
+    #determine if there is odd or even amount of joints
+    if len( pJointList )%2 == 0: #if even
+        centerIndex = [(len(pJointList)//2)-1, len(pJointList)//2 ]
+        
+        #scale constraint the offset groups of the controllers to locM and start/end controller
+        for x in range( len(controlCurveList) ):
+            weight = 100/centerIndex[0] * x
+            opWeight = abs(100-weight)
+        
+            if x==0 or x==len(controlCurveList)-1: #skip the first and last controllers
+                continue
+            elif x < centerIndex[0]: #if to the left of the center
+                cmds.scaleConstraint( pJointList[centerIndex[0]]+'_ctrl', firstJoint+'_ctrl', pJointList[x]+'_offset', mo = True) #scale constrain the offset ctrl groups to the center controllers and start controller
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+pJointList[centerIndex[0]]+'_ctrlW0', weight )
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+firstJoint+'_ctrlW1', opWeight )
+            elif x > centerIndex[1]: #if to the right of the center
+                cmds.scaleConstraint( pJointList[centerIndex[1]]+'_ctrl', lastJoint+'_ctrl', pJointList[x]+'_offset', mo = True)
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+pJointList[centerIndex[1]]+'_ctrlW0', weight ) #this is wrong
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+lastJoint+'_ctrlW1', opWeight )
+            else: #if we are at the center joints
+                cmds.scaleConstraint( 'Loc_M', pJointList[centerIndex[0]]+'_offset', mo = True)
+                cmds.scaleConstraint( 'Loc_M', pJointList[centerIndex[1]]+'_offset', mo = True)
+                
+            #calculate the distance from the center joint and then use that to determine the scale strength
+                  
+  
+    else: #if odd
+        centerIndex = (len(pJointList)//2)
+    
+        for x in range( len(controlCurveList) ):
+            weight = 100/centerIndex * x #this is wrong after we get to the right side
+            opWeight = abs(100-weight)
+            
+            if x==0 or x==len(controlCurveList)-1: #skip the first and last controllers
+                continue
+            elif x < centerIndex: #if to the left of the center
+                cmds.scaleConstraint( pJointList[centerIndex]+'_ctrl', firstJoint+'_ctrl', pJointList[x]+'_offset', mo = True)
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+pJointList[centerIndex]+'_ctrlW0', weight )
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+firstJoint+'_ctrlW1', opWeight )
+            elif x > centerIndex: #if to the right of the center
+                cmds.scaleConstraint( pJointList[centerIndex]+'_ctrl', lastJoint+'_ctrl', pJointList[x]+'_offset', mo = True)
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+pJointList[centerIndex]+'_ctrlW0', weight ) #this is wrong 
+                cmds.setAttr( pJointList[x]+'_offset_scaleConstraint1.'+lastJoint+'_ctrlW1', opWeight )
+            else: #if we are at the center joints, skip
+                cmds.scaleConstraint( 'Loc_M', pJointList[centerIndex]+'_offset', mo = True)
+     
+        
+    #the middle has 100 scaling, as the joints get further away, the scaling influence decreases
+
+        
     
     #GROUP EVERYTHING INTO stretchy_grp
     #create group
-    stretchy_grp = cmds.group( f"{pJointList[0]}_helper" , n='stretchy_grp' )
+    stretchy_grp = cmds.group( f"{pJointList[0]}_helper", 'Loc_M_offset', n='stretchy_grp' )
     
     #add the controllers into it
     for jnt in pJointList:
-        cmds.parent( jnt + '_offset', stretchy_grp ) 
+        cmds.parent( jnt + '_offset', stretchy_grp )
 
 ####################################################################################################################################
 
