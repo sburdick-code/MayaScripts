@@ -1,3 +1,14 @@
+#☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺
+#
+#    Script:          cartoonEyeRigger.py
+#    Author:          Audrey Paransky
+#    Last Updated:    09/09/2024
+#    Created:         09/09/2024
+#    Description:     This script creates a rig for cartoon eyes and mouths using the user's selected vertices as a base.
+#                     The rig is MOSTLY 1:1 translatable and scaleable, but distortions are noticeable at extreme values.
+#
+#☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺☺
+
 from maya import cmds, OpenMaya
 import functools
 
@@ -91,21 +102,7 @@ def create_UI( pWindowTitle ):
     
     # SIXTEENTH ROW --------------------------------
     cmds.text( label='Parent & scale constrain rig group to head controller' )
-    
-    '''
-    # THIRTEENTH ROW --------------------------------
-    cmds.rowLayout( adj=2, numberOfColumns=3 )
-    cmds.text( label='select lower Eyelid Curve' )
-    lowerCrv = cmds.textField( pht='curve', ed=True )
-    cmds.button( label='Select', command=functools.partial( get_selection, lowerCrv ) )
 
-    cmds.setParent( '..' )
-    '''
-    
-    
-    #cmds.text( label='to redo vertex selection after creating joints, delete upper and lower groups KEEP CENTER. To start over, delete everything' )
-
-    
     cmds.showWindow( windowID )
     
     
@@ -223,11 +220,13 @@ def gen_Curve(pPoints, pPosPrefix, pHighLow):
             # Include the first point
             lowPoints.append(controlPoints[0])
             
-            # Calculate indices to pick three evenly spaced points from the middle
-            step = (len(controlPoints) - 2) // 3  # The number of points between each selected point
-            for i in range(1, 4):
-                lowPoints.append(controlPoints[i * step])
+            centerPt = len(controlPoints)//2
+            step = centerPt//2
             
+            lowPoints.append(controlPoints[centerPt-step])
+            lowPoints.append(controlPoints[centerPt])
+            lowPoints.append(controlPoints[centerPt+step])
+
             # Include the last point
             lowPoints.append(controlPoints[-1])
         else:
@@ -394,13 +393,6 @@ def create_controllers( pUpBot, pNameField, pRadioCol, *pArgs ):
     cmds.parentConstraint( controllerList[0], controllerList[2], offsetGrp1, mo=True )
     cmds.parentConstraint( controllerList[2], controllerList[4], offsetGrp3, mo=True )
     
-    '''
-    #group all the curves together
-    crvGroup = [obj for obj in cmds.ls() if 'CRV' in obj.lower() ] #query everything containing crv in its name
-    cmds.group( crvGroup, n='CRV_GROUP' )
-    '''
-    
-    
     #check to make sure there is a top and a bot low crv
     upCrv = create_name( 'Up', pNameField, pRadioCol ) + 'Low_CRV'
     botCrv = create_name( 'Bot', pNameField, pRadioCol ) + 'Low_CRV'
@@ -453,11 +445,7 @@ def create_controllers( pUpBot, pNameField, pRadioCol, *pArgs ):
         #create blendshape 
         upBlendshape = cmds.blendShape( upClosed, highUpCrv, n=upNaming+'_targetSmartClosed', o='local' )[0] #use the duplicates as blendshapes for the high crvs
         botBlendshape = cmds.blendShape( botClosed, highBotCrv, n=botNaming+'_targetSmartClosed', o='local' )[0]
-        '''
-        #reorder deformers such that the blendshape goes above the wiredeformer
-        cmds.reorderDeformers( upBlendshape, wireNodeUp, highUpCrv )
-        cmds.reorderDeformers( botBlendshape, wireNodeBot, highBotCrv )
-        '''
+
         #create attribute in master controller to control up or down blink
         cmds.addAttr( masterControl, shortName = 'Smart_Close_Up', longName = 'Smart_Close_Up', defaultValue=0, minValue=0, maxValue=1, keyable = True)
         cmds.addAttr( masterControl, shortName = 'Smart_Close_Down', longName = 'Smart_Close_Down', defaultValue=0, minValue=0, maxValue=1, keyable = True)
