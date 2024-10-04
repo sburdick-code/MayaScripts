@@ -306,9 +306,12 @@ def create_stretchy_system( pTextField1, pTextField2, *pArgs ):
 
 def create_placement_locators( pNameField, pNumberField, pParentJoint, *pArgs ):
 
-    # Check if all parameters are filled
-    if not( ( cmds.textField(pNameField, query=True, text=True) )and( int(cmds.textField( pNumberField, query=True, text=True )) > 0 )and( cmds.textField(pParentJoint, query=True, text=True) ) ):
+    # Check if all parameters are filled properly
+    if not( ( cmds.textField(pNameField, query=True, text=True) ) and ( cmds.textField(pParentJoint, query=True, text=True) ) ):
         cmds.error("Parameters not valid", n=True)
+        return 0
+    elif not( int(cmds.textField( pNumberField, query=True, text=True )) > 1 ):
+        cmds.error( "Must have at least 2 joints!", n=True )
         return 0
     elif not( cmds.objExists( cmds.textField(pParentJoint, query=True, text=True) ) ):
         cmds.error("No valid parent joint parameter", n=True)
@@ -325,39 +328,52 @@ def create_placement_locators( pNameField, pNumberField, pParentJoint, *pArgs ):
     cmds.scale( scaleValue, scaleValue, scaleValue, firstPL )
     firstGroup = cmds.group( name = pName + "_first_off" )
     middlePLList=[]
-    middleGroup = cmds.group( name = pName + "_middle_off" )
+    middleGroupList=[]
     lastPL = cmds.spaceLocator( name = pName + "_lastPlacement" )
     cmds.scale( scaleValue, scaleValue, scaleValue, lastPL )
     lastGroup = cmds.group( name = pName + "_last_off" )
-
-
-
-    if number > 0:
-        for i in range( number ):
-            middlePL = cmds.spaceLocator( name = pName + "_middlePlacement_" + str(i).zfill(2) )
-            cmds.scale( scaleValue, scaleValue, scaleValue, middlePL )
-            middlePLList.append( middlePL )
-            cmds.parent( middlePL, middleGroup )
-    else:
-        cmds.error( "Invalid number of joints to create!", n=True )
-        return 0
-
-    print( middlePLList )
-
-
-    # Constrain the middle locator's offset group to follow in between the origin and insertion locators
-    cmds.parentConstraint( firstPL, middleGroup)
-    cmds.parentConstraint( lastPL, middleGroup)
-
-    #Move the system to translate value
     cmds.xform( lastGroup, ws = True, translation = translateValue )
+
+    locatorList = [ firstPL ]
+    locatorGroupList = [ firstGroup ]
 
     #Group the system under the group placementLocators_grp
     locatorGroup = cmds.group( em = True, name = pName + "_placementLocators_grp" )
     cmds.parent( firstGroup, locatorGroup )
     cmds.parent( lastGroup, locatorGroup )
-    cmds.parent( middleGroup, locatorGroup )
 
+    # Divide the distance of the translate value in half and place each locator in the list at that point
+    distance = translateValue[1] / ( number - 1 )
+    incDistance = distance
+
+    cmds.select(clear=True)
+    middleGroupHead = cmds.group( em = True, name = pName + "_middle_off" )
+
+    # Create each locator even distance apart
+    if number > 1:
+        for i in range( number-2 ):
+            middlePL = cmds.spaceLocator( name = pName + "_middlePlacement_" + str(i).zfill(2) )
+            cmds.scale( scaleValue, scaleValue, scaleValue, middlePL )
+            cmds.makeIdentity( middlePL, apply=True )
+            middleGroup = cmds.group( name = pName + "_middle_off_" + str(i).zfill(2) )
+            print ( incDistance )
+            cmds.xform( middleGroup, ws = True, translation = [0, incDistance, 0] )
+
+            locatorList.append( middlePL )
+            locatorGroupList.append( middleGroup )
+
+            incDistance = incDistance + distance
+        
+        locatorList.append( lastPL )
+        locatorGroupList.append( lastGroup )
+
+        for i in range( number ):
+            if( (i != 0) and (i != ( len(locatorGroupList) - 1) ) ):
+                cmds.parentConstraint( locatorList[i-1], locatorGroupList[i] )
+                cmds.parentConstraint( locatorList[i+1], locatorGroupList[i] )
+                cmds.parent( locatorGroupList[i], middleGroupHead )
+
+    cmds.parent( middleGroupHead, locatorGroup )
     cmds.select(clear=True)
     successGroup = cmds.group( name= pName + "_SuccessGroup", empty=True )
     cmds.parent( successGroup, locatorGroup )
@@ -376,7 +392,9 @@ def create_jointchain_at_locators( pNameField, pNumberField, pParentJoint, *pArg
 
     pFirstPL = pName + "_firstPlacement"
     pLastPL = pName + "_lastPlacement"
-    pMiddleList = cmds.listRelatives( pName + "_middle_off")
+    pMiddleList = cmds.listRelatives( pName + "_middle_off" )
+    print( pMiddleList )
+    print( cmds.listRelatives(pMiddleList[0]) )
 
     # Get the location of locators
     firstLoc = cmds.xform( pFirstPL, query=True, translation=True, ws=True )
@@ -385,7 +403,9 @@ def create_jointchain_at_locators( pNameField, pNumberField, pParentJoint, *pArg
     middleLocList = []
     translationList = [ firstLoc ]
     for i in range( number ):
-        translationList.append( cmds.xform( pMiddleList[i], query=True, translation=True, ws=True ) )
+        locator = cmds.listRelatives(pMiddleList[i])
+        print ( locator[0] )
+        translationList.append( cmds.xform( locator[0], query=True, translation=True, ws=True ) )
 
     translationList.append( lastLoc )
 
@@ -396,7 +416,7 @@ def create_jointchain_at_locators( pNameField, pNumberField, pParentJoint, *pArg
     middleRotList = []
     rotationList = [ firstRot ]
     for i in range( number ):
-        rotationList.append( cmds.xform( pMiddleList[i], query=True, rotation=True, ws=True ) )
+        rotationList.append( cmds.xform( cmds.listRelatives(pMiddleList[i]), query=True, rotation=True, ws=True ) )
 
     rotationList.append( lastRot )
 
