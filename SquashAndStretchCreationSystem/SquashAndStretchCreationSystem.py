@@ -7,8 +7,14 @@ def main():
 ####################################################################################################################################
 
 def create_ui(pWindowTitle):
+    """
+    Format for the GUI then creates and displays the widget in Maya.
 
-    windowID = 'hello'
+    Args:
+    pWindowTitle (str) : name of the window
+    """
+
+    windowID = 'SquashAndStretch_SA'
     
     # Check if the window exists
     if cmds.window( windowID, exists=True ):
@@ -17,6 +23,7 @@ def create_ui(pWindowTitle):
     window = cmds.window( windowID, title=pWindowTitle, sizeable=True )
     cmds.columnLayout( adj=True )
 
+    ### EXISTING JOINT CHAIN ---------------------------------------------
     # First row ####################
     cmds.text( label='EXISTING JOINT CHAIN', font='boldLabelFont' )
 
@@ -41,7 +48,7 @@ def create_ui(pWindowTitle):
                                                               originParentField, insertionParentField ) ) #change this after create_stretchy_system edits
     #cmds.button( label='Help', command=functools.partial( display_Help_UI ) )
 
-        # NEW JOINT CHAIN ---------------------------------------------
+    ### NEW JOINT CHAIN ---------------------------------------------
     # ROW 01 ---------------------------
     cmds.separator( height=10 )
 
@@ -104,6 +111,14 @@ def create_ui(pWindowTitle):
 ####################################################################################################################################
 
 def get_selection( pField, objType, *pArgs):
+    """
+    Populate a textfield with the name of a selected object.
+
+    Args:
+    pField (mayaTextField) : The field to be populated with the name of the selected object
+    objType (str) : The data type the selected object must match
+    """
+
     selection = cmds.ls( selection=True, type=objType)
         
     if selection:
@@ -115,7 +130,6 @@ def get_selection( pField, objType, *pArgs):
 
 def delete_stretchy_system( pStretchyGroup ):
     print('hello')
-    # This function will create the formatted GUI for our script
 
 ####################################################################################################################################
 
@@ -126,6 +140,7 @@ def create_stretchy_system( pTextField1, pTextField2, *pArgs ):
     
     pJointList = []
     
+    # select the hierarchy and append it to pJointList
     cmds.select( firstJoint, hi=True )
     pJointList = cmds.ls( sl=True, type='joint' )
     print( pJointList )
