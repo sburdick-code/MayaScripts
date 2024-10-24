@@ -1,31 +1,51 @@
-def main():
-    case01 = "III"
-    case02 = "LVII"
-    case03 = "MCMXCIV"
+""" Circuitous, LLC - 
+    An Adventurous Circle Company
 
-    romanToInt( case03 )
+"""
 
-def romanToInt( s ):
-    num = 0
-    values = []
-    master = { 'I':1, 'V':5, 'X':10, 'L':50, 'C':100, 'D':500, 'M':1000 }
-    maths = []
+import math
 
-    for i in range(len(s)):
-        values.append( master[s[i]])
+class Circle(object):
+    """An advanced circle analytic toolkit"""
+
+    __slots__ = ['diameter']     # flyweight design pattern suppresses the instance dictionary, saving lots of memory
+    version = '0.5b'             # class variable
+
+    def __init__(self, radius):
+        self.radius = radius    # instance variable
+
+    @property                   # convert dotted access to method calls
+    def radius(self):
+        """Radius of a circle"""
+        return self.diameter / 2.0
     
-    for i in range(len(s)):
-        if i != 0:
-            if values[i-1] < values[i]:
-                print( f"{values[i-1]} < {values[i]}" )
-                maths.append('-')
-            else:
-                print( f"{values[i-1]} == {values[i]}" )
-                maths.append('+')
-    
-    print(values)
-    print(maths)
+    @radius.setter
+    def radius(self, radius):
+        self.diameter = radius * 2.0
 
-        
+    def area(self):
+        """Perform quadrature on a shape of uniform radius"""
+        p = self.__perimeter()
+        r = p / math.pi / 2.0
+        return math.pi * r ** 2.0
 
-main()
+    def perimeter(self):
+        return 2.0 * math.pi * self.radius
+
+    @classmethod                # alternative constructor
+    def from_bbd(cls, bbd):
+        """Construct a circle from a bounding box diagonal"""
+        radius = bbd/ 2.0 / math.sqrt(2.0)
+        return Circle(radius)
+
+    @staticmethod               # unrelated method, but some people need it in context
+    def angle_to_grade(angle):
+        """Convert angle in degree to a percentage grade"""
+        return math.tan(math.radians(angle)) * 100.0
+
+class Tire(Circle):
+    """Tires are circles with a corrected perimeter"""
+
+    def perimeter(self):
+        """Circumference corrected for the rubber"""
+        return Circle.perimeter(self) * 1.25
