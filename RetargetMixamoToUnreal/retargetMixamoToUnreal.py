@@ -9,6 +9,8 @@
 import maya.cmds as cmds
 import maya.mel as mel
 
+timeRange = 60
+
 
 def prep_mixamo_rig():
     """
@@ -341,10 +343,12 @@ def bake_animation():
 
     print(f"To Bake: {toBake}")
 
+    """
     # Get the length of the animation to bake
     timeRange = -2 + cmds.keyframe(
         f"{mixamoJoints[0]}.translateX", query=True, keyframeCount=True
     )
+    """
     cmds.playbackOptions(
         ast=0, aet=timeRange
     )  # Set the timeline to the animation length
