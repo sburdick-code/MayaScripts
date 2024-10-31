@@ -1,3 +1,11 @@
+#########################################################################################
+#
+#   By: Simon Burdick
+#   Tool: v0.02
+#
+#########################################################################################
+
+
 import maya.cmds as cmds
 import maya.mel as mel
 
@@ -191,6 +199,16 @@ def prep_unreal_rig():
             "index": 129,
             "ro": [0, 0, 0],
         },
+        {
+            "name": "clavicle_r",
+            "index": 56,
+            "ro": [163.264, 90, -26.876],
+        },
+        {
+            "name": "clavicle_l",
+            "index": 10,
+            "ro": [163.264, 90, 153.124],
+        },
     ]
 
     # "zero" out the arm and leg joints
@@ -247,10 +265,40 @@ def bake_animation():
         "RightArm": [8, 57],
         "RightForeArm": [9, 58],
         "RightHand": [10, 66],
+        "RightHandThumb1": [11, 85],
+        "RightHandThumb2": [12, 86],
+        "RightHandThumb3": [13, 87],
+        "RightHandIndex1": [15, 82],
+        "RightHandIndex2": [16, 83],
+        "RightHandIndex3": [17, 84],
+        "RightHandMiddle1": [19, 78],
+        "RightHandMiddle2": [20, 79],
+        "RightHandMiddle3": [21, 80],
+        "RightHandRing1": [23, 74],
+        "RightHandRing2": [24, 75],
+        "RightHandRing3": [25, 76],
+        "RightHandPinky1": [27, 70],
+        "RightHandPinky2": [28, 71],
+        "RightHandPinky3": [29, 72],
         "LeftShoulder": [31, 10],
         "LeftArm": [32, 11],
         "LeftForeArm": [33, 12],
         "LeftHand": [34, 20],
+        "LeftHandThumb1": [35, 31],
+        "LeftHandThumb2": [36, 32],
+        "LeftHandThumb3": [37, 33],
+        "LeftHandIndex1": [39, 24],
+        "LeftHandIndex2": [40, 25],
+        "LeftHandIndex3": [41, 26],
+        "LeftHandMiddle1": [43, 28],
+        "LeftHandMiddle2": [44, 29],
+        "LeftHandMiddle3": [45, 30],
+        "LeftHandRing1": [47, 39],
+        "LeftHandRing2": [48, 40],
+        "LeftHandRing3": [49, 41],
+        "LeftHandPinky1": [51, 35],
+        "LeftHandPinky2": [52, 36],
+        "LeftHandPinky3": [53, 37],
         "RightUpLeg": [55, 106],
         "RightLeg": [56, 107],
         "RightFoot": [57, 108],
