@@ -176,18 +176,35 @@ def get_selection(pField, objType, *pArgs):
         cmds.error(f"No {objType} selected!", n=True)
 
 
-def delete_stretchy_system(pStretchyGroup):
+def delete_stretchy_system(pStretchyComponent):
     """
     Deletes all nodes that are associated with the stretchy system from this script.
 
     Args:
-        pStretchyGroup (cmds.group): The stretchy group node for deletion.
+        pStretchyComponent (cmds.joint): A joint of the stretchy system that contains a reference to its parent stretchy system
+                                         group. It should have the string attribute, parentSystem as the group name.
 
     Returns:
         None: This function does not return a value.
+
+    Raises:
+        MayaError: If the selected joint does not have a stretchy system.
+            - "Selected joint is not part of a stretchy system!"
     """
 
-    print("hello world")
+    if cmds.getAttr(f"{pStretchyComponent}.parentSystem"):
+        groupName = cmds.getAttr(f"{pStretchyComponent}.parentSystem")
+        jointsAffected = cmds.getAttr(f"{groupName}.jointsAffected")
+        systemToDelete = cmds.getAttr(f"{groupName}.stretchySystem")
+
+        for jnt in jointsAffected:
+            cmds.deleteAttr(f"{jnt}.parentSystem")
+        cmds.delete(systemToDelete)
+
+        print("\n\n### Stretchy System Deleted ###\n\n")
+
+    else:
+        cmds.error("Selected joint is not part of a stretchy system!", n=True)
 
 
 def create_stretchy_system(pTextField1, pTextField2, *pArgs):
@@ -205,6 +222,9 @@ def create_stretchy_system(pTextField1, pTextField2, *pArgs):
         MayaError: If any textfields are improperly filled.
             - "Not enough joints in chain (at least 3 required)" If no joints are detectable with the data from the text fields
     """
+
+    # Add any nodes created for the stretchy system to this variable, do not add skin joints
+    StretchySystem = ["stretchy_grp"]
 
     firstJoint = cmds.textField(pTextField1, query=True, text=True)
     lastJoint = cmds.textField(pTextField2, query=True, text=True)
@@ -510,6 +530,32 @@ def create_stretchy_system(pTextField1, pTextField2, *pArgs):
     # add the controllers into it
     for jnt in pJointList:
         cmds.parent(jnt + "_offset", stretchy_grp)
+
+    """These next lines are necessary to set up the deletion system"""
+    # Add the name of the stretchy group to all joints affected
+    for jnt in pJointList:
+        cmds.addAttr(jnt, ln="parentSystem", dt="string")
+        cmds.setAttr(f"{jnt}.parentSystem", stretchy_grp, type="string")
+
+    # Add a the names of all stretchy system nodes to the local stretchySystemGroup
+    cmds.addAttr(stretchy_grp, ln="stretchySystem", dt="stringArray")
+    cmds.setAttr(
+        f"{stretchy_grp}.stretchySystem",
+        len(StretchySystem),
+        *StretchySystem,
+        type="stringArray",
+    )
+    print(cmds.getAttr(f"{stretchy_grp}.stretchySystem"))
+
+    # Add the names of all the joints affected by the stretchySystemGroup
+    cmds.addAttr(stretchy_grp, ln="jointsAffected", dt="stringArray")
+    cmds.setAttr(
+        f"{stretchy_grp}.jointsAffected",
+        len(pJointList),
+        *pJointList,
+        type="stringArray",
+    )
+    print(cmds.getAttr(f"{stretchy_grp}.jointsAffected"))
 
 
 def create_placement_locators(pNameField, pNumberField, pParentJoint, *pArgs):
