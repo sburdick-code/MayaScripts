@@ -6,7 +6,7 @@ def main():
     """
     The main function.
     """
-    create_ui("MyWindowName")
+    create_ui("SquashAndStretchCreationSystem")
 
 
 """
@@ -45,6 +45,18 @@ def create_ui(pWindowTitle):
     cmds.text(label="EXISTING JOINT CHAIN", font="boldLabelFont")
 
     # Second row ####################
+    cmds.separator(height=10)
+
+    # Third row ####################
+    cmds.rowLayout(adj=3, numberOfColumns=4)
+    cmds.separator(style="none", height=10, width=30)
+    cmds.text(label="Name:")
+    nameField = cmds.textField(pht="Name", editable=True, aie=True)
+    cmds.separator(style="none", height=10, width=30)
+
+    cmds.setParent("..")
+
+    # Fourth row ####################
     cmds.rowLayout(adj=2, numberOfColumns=3)
     cmds.text(label="first")
     originParentField = cmds.textField(pht="Origin Parent Joint", ed=True)
@@ -55,7 +67,7 @@ def create_ui(pWindowTitle):
 
     cmds.setParent("..")
 
-    # Third row ####################
+    # Fifth row ####################
     cmds.rowLayout(adj=2, numberOfColumns=3)
     cmds.text(label="last")
     insertionParentField = cmds.textField(pht="Insertion Parent Joint", ed=True)
@@ -66,11 +78,11 @@ def create_ui(pWindowTitle):
 
     cmds.setParent("..")
 
-    # Fourth row ####################
+    # Sixth row ####################
     cmds.button(
         label="Generate",
         command=functools.partial(
-            create_stretchy_system, originParentField, insertionParentField
+            create_stretchy_system, originParentField, insertionParentField, nameField
         ),
     )  # change this after create_stretchy_system edits
     # cmds.button( label='Help', command=functools.partial( display_Help_UI ) )
@@ -143,10 +155,36 @@ def create_ui(pWindowTitle):
         ),
     )
 
-    # ROW 13 ---------------------------
+    ### DELETE FUNCTION ---------------------------------------------
+    # ROW 01 ---------------------------
+    cmds.separator(height=10)
+
+    # ROW 02 ---------------------------
+    cmds.text(label="DELETE SELECTED STRETCHY SYSTEM", font="boldLabelFont")
+
+    # ROW 03 ---------------------------
     cmds.separator(style="none", height=10)
 
-    # ROW 14 ---------------------------
+    # ROW 04 ---------------------------
+    cmds.rowLayout(adj=2, numberOfColumns=3)
+    cmds.text(label="Joint affected by stretchy system")
+    deletionField = cmds.textField(pht="Joint Name", ed=True)
+    cmds.button(
+        label="Select",
+        command=functools.partial(get_selection, deletionField, "joint"),
+    )
+
+    cmds.setParent("..")
+
+    # ROW 05 ---------------------------
+    cmds.button(
+        label="Delete",
+        command=functools.partial(
+            delete_stretchy_system, cmds.textField(deletionField, query=True, text=True)
+        ),
+    )
+
+    # ROW 06 ---------------------------
     cmds.separator(height=10)
 
     cmds.showWindow(window)
@@ -176,7 +214,7 @@ def get_selection(pField, objType, *pArgs):
         cmds.error(f"No {objType} selected!", n=True)
 
 
-def delete_stretchy_system(pStretchyComponent):
+def delete_stretchy_system(pStretchyComponent, *pArgs):
     """
     Deletes all nodes that are associated with the stretchy system from this script.
 
@@ -201,339 +239,205 @@ def delete_stretchy_system(pStretchyComponent):
             cmds.deleteAttr(f"{jnt}.parentSystem")
         cmds.delete(systemToDelete)
 
+        helper1 = groupName + "_helper1_jnt"
+        helper2 = groupName + "_helper2_jnt"
+
+        cmds.removeJoint(helper1)
+        cmds.removeJoint(helper2)
+
         print("\n\n### Stretchy System Deleted ###\n\n")
 
     else:
         cmds.error("Selected joint is not part of a stretchy system!", n=True)
 
 
-def create_stretchy_system(pTextField1, pTextField2, *pArgs):
+def createController(pName, pJoint):
+    """
+    Receives a name and the joint to be constrained/controlled and then creates a controller and offset group
+
+    Args:
+        pName (string): A string to name the controller
+        pJoint (cmds.joint): The joint to be constrained/controlled
+
+    Returns:
+        newControl (string): the name of the generated controller
+    """
+
+    loc = cmds.xform(pJoint, q=True, t=True, ws=True)
+    rot = cmds.xform(pJoint, q=True, ro=True, ws=True)
+
+    newControl = cmds.circle(
+        c=(0, 0, 0), name=(pName + "_ctrl")
+    )  # c changes the shape of the cirlce, 0,0,0 ensures that it's a full circle
+    cmds.rotate(0, 90, 0, newControl)
+    offGrp = cmds.group(newControl, n=newControl[0] + "_offset")
+    cmds.move(loc[0], loc[1], loc[2], offGrp)
+    cmds.makeIdentity(newControl, apply=True)
+    cmds.rotate(rot[0], rot[1], rot[2], offGrp)
+    return newControl
+
+
+def create_stretchy_system(pTextField1, pTextField2, pNameField, *pArgs):
     """
     Receives the start and end joints in a chain and then produces a stretchy rigging system for them.
 
     Args:
         pTextField1 (cmds.textField): A text field containing the name of the joint structure.
         pTextField2 (cmds.textField): A textfield containing the number of locators/joints to be created.
+        pNameField (cmds.textField): A textfield containing the name of the system to be created
 
     Returns:
         None: This function does not return a value.
 
     Raises:
         MayaError: If any textfields are improperly filled.
-            - "Not enough joints in chain (at least 3 required)" If no joints are detectable with the data from the text fields
+            - "Not enough joints in chain (at least 3 required)" If there are less than three joints in the joint chain detectable with the data from the text fields
+            - "{joint} and {joint} don't exist!" If the selected joints from the text field don't exist
     """
 
     # Add any nodes created for the stretchy system to this variable, do not add skin joints
-    StretchySystem = ["stretchy_grp"]
+    StretchySystem = []
+    systemName = cmds.textField(pNameField, query=True, text=True)
 
-    firstJoint = cmds.textField(pTextField1, query=True, text=True)
-    lastJoint = cmds.textField(pTextField2, query=True, text=True)
+    firstJnt = cmds.textField(pTextField1, query=True, text=True)
+    lastJnt = cmds.textField(pTextField2, query=True, text=True)
 
-    pJointList = []
+    if not cmds.objExists(firstJnt) or not cmds.objExists(lastJnt):
+        cmds.error(f"{firstJnt} and {lastJnt} don't exist!", n=True)
+        return
 
-    # select the hierarchy and append it to pJointList
-    cmds.select(firstJoint, hi=True)
-    pJointList = cmds.ls(sl=True, type="joint")
-    print(pJointList)
-
-    if not (
-        len(pJointList) >= 3
-    ):  # if there arent at least 3 joints in the pre existing group
-        cmds.error("Not enough joints in chain (at least 3 required)", n=True)
-        return 0
-
-    # if the grp already exists, delete it
+    # if a stretchy group for either of the selected joints already exists, delete the related one and create a new one
     if cmds.objExists("stretchy_grp"):
-        cmds.delete("stretchy_grp")
+        delete_stretchy_system(firstJnt)
 
-    # CREATE CONTROLLERS
-    controlCurveList = []
+    cmds.select(firstJnt, hi=True)
+    jointList = cmds.ls(sl=True, type="joint")
+    for j in range(len(jointList)):
+        if jointList[j] == lastJnt:
+            lastIndex = j
+    jointList = jointList[:lastIndex]
 
-    for jnt in pJointList:
-        ## Joint Information
-        # Get parent of current joint
-        jntParent = cmds.listRelatives(jnt, parent=True)
-        if jntParent:
-            jntParentName = jntParent[0]
-        else:
-            jntParentName = "GARBAGE"  # this is for the first joint in the heirarchy since it has no parent. there needs to be something
+    if len(jointList) < 3:
+        cmds.error("Not enough joints in chain (at least 3 required)", n=True)
 
-        # Get Radius of current joint
-        jntRadius = cmds.getAttr(jnt + ".radius")
+    secondJnt = jointList[1]
 
-        # Get translation and rotation of current joint
-        jntTranslation = cmds.xform(jnt, query=True, translation=True, worldSpace=True)
-        jntRotation = cmds.xform(jnt, query=True, rotation=True, worldSpace=True)
+    firstJntLoc = cmds.xform(firstJnt, q=True, t=True, ws=True)
+    lastJntLoc = cmds.xform(lastJnt, q=True, t=True, ws=True)
 
-        ## Controller Manipulation
-        # Create new controller
-        newControl = cmds.spaceLocator(name=(jnt + "_ctrl"))
-        controlCurveList.append(
-            newControl[0]
-        )  # newControl will return a dictionary containing the transform and the shape node, you just want the name, hence [0]
-        cmds.move(jntTranslation[0], jntTranslation[1], jntTranslation[2], newControl)
-        cmds.makeIdentity(newControl, apply=True)
+    cmds.select(clear=True)
+    helper1 = cmds.joint(p=firstJntLoc, n=systemName + "_helper1_jnt")
+    cmds.joint(helper1, e=True, zso=True, oj="xyz")
+    cmds.select(clear=True)
+    helper2 = cmds.joint(p=lastJntLoc, n=systemName + "_helper2_jnt")
 
-        # Create the offset group for our new controller
-        newGroup = cmds.group(empty=True, name=(jnt + "_offset"))
-        cmds.move(
-            jntTranslation[0], jntTranslation[1], jntTranslation[2], newGroup
-        )  # the group and the cntrl are at the same place
-        cmds.makeIdentity(newGroup, apply=True)  # freeze transformations
+    firstController = createController(firstJnt, firstJnt)[0]
+    lastController = createController(lastJnt, lastJnt)[0]
 
-        # Make new control a child of new group
-        cmds.parent(newControl, newGroup)
+    cmds.pointConstraint(firstController, firstJnt)
+    cmds.pointConstraint(lastController, lastJnt)
+    cmds.parentConstraint(lastController, helper2)
 
-        # Rotate offset group to match the rotations of the joint
-        cmds.rotate(jntRotation[0], jntRotation[1], jntRotation[2], newGroup)
+    cmds.parent(helper1, firstJnt)
+    cmds.parent(helper2, firstJnt)
+    cmds.parent(secondJnt, helper1)
+    cmds.parent(lastController + "_offset", firstController)
 
-        """
-        ## Place group in the right hierarchy
-        if ( jntParentName + '_ctrl' ) in controlCurveList:
-            cmds.parent( newGroup, (jntParentName + '_ctrl') )
-            print( newGroup + ' parented under ' + jntParentName + '_ctrl' )
-        else:
-            print( 'No parent found' )
-            print( jntParentName ) 
-            print( controlCurveList )
-        """
-
-        ## Parent constrain joint under control
-        cmds.parentConstraint(newControl, jnt)
-
-    # PARENT CONSTRAIN THE MIDDLE CONTROLLER OFFSET GROUPS TO THEIR ADJACENT CONTROLLERS
-    for x in range(len(pJointList)):
-        if pJointList[x] == firstJoint or pJointList[x] == lastJoint:
-            continue
-
-        cmds.parentConstraint(
-            controlCurveList[x - 1], controlCurveList[x + 1], pJointList[x] + "_offset"
-        )
-
-    # BUILD HELPER JOINTS
-    jointRotList = []
-    jointTransList = []
-
-    jointRotList.append(
-        cmds.xform(
-            pJointList[0],
-            rotation=True,
-            worldSpace=True,
-            q=True,
-        )
-    )  # the first elemeent in the joint list
-    jointRotList.append(
-        cmds.xform(
-            pJointList[-1],
-            rotation=True,
-            worldSpace=True,
-            q=True,
-        )
-    )  # the first elemeent in the joint list
-    jointTransList.append(
-        cmds.xform(
-            pJointList[0],
-            translation=True,
-            worldSpace=True,
-            q=True,
-        )
-    )  # the last element in the joint list
-    jointTransList.append(
-        cmds.xform(
-            pJointList[-1],
-            translation=True,
-            worldSpace=True,
-            q=True,
-        )
-    )  # the last element in the joint list
-
-    helperJoints = []
-
-    cmds.select(deselect=True)
-    helperJoints.append(
-        cmds.joint(
-            position=jointTransList[0],
-            orientation=jointRotList[0],
-            name=pJointList[0] + "_helper",
-        )
+    distanceNode = cmds.shadingNode(
+        "distanceBetween", asUtility=True, n=systemName + "_distanceBetween"
     )
-    cmds.select(deselect=True)
-    helperJoints.append(
-        cmds.joint(
-            position=jointTransList[-1],
-            orientation=jointRotList[-1],
-            name=pJointList[-1] + "_helper",
-        )
+    cmds.connectAttr(helper2 + ".translate", distanceNode + ".point1")
+    defaultDistance = cmds.getAttr(distanceNode + ".distance")
+
+    distanceFactor = cmds.shadingNode(
+        "multiplyDivide", asUtility=True, n=systemName + "_distanceFactor"
     )
+    cmds.setAttr(distanceFactor + ".input2X", defaultDistance)
+    cmds.setAttr(distanceFactor + ".operation", 2)
+    cmds.connectAttr(distanceNode + ".distance", distanceFactor + ".input1X")
 
-    cmds.parent(
-        helperJoints[-1], helperJoints[0]
-    )  # parent the current joint to the previous joint
-
-    # parent constrain the helper joints to the controllers
-    cmds.parentConstraint(controlCurveList[0], helperJoints[0])
-    cmds.parentConstraint(controlCurveList[-1], helperJoints[-1])
-
-    # CREATE MIDDLE DRIVER LOC
-    # place a locator between the first and last joint
-    cmds.spaceLocator(n="Loc_M")  # create locator
-    cmds.group("Loc_M", n="Loc_M_offset")
-    cmds.parentConstraint(firstJoint, lastJoint, "Loc_M_offset")
-
-    # CREATE THE SCALE EXPRESSIONS
-
-    statement = "$peak / pow(1 + $blend * $dist, 2)"
-
-    cmds.expression(
-        object="Loc_M_offset",
-        string=f" float $dist = abs({helperJoints[-1]}.translateX) + abs({helperJoints[-1]}.translateY) + abs({helperJoints[-1]}.translateZ); float $peak = 6; float $blend = .6; Loc_M_offset.scaleX = {statement}; Loc_M_offset.scaleY = {statement}; Loc_M_offset.scaleZ = {statement};",
+    invertIt = cmds.shadingNode(
+        "multiplyDivide", asUtility=True, n=systemName + "_invertIt"
     )
+    cmds.setAttr(invertIt + ".input1X", 1)
+    cmds.setAttr(invertIt + ".operation", 2)
+    cmds.connectAttr(distanceFactor + ".outputX", invertIt + ".input2X")
 
-    # scale constraint the middle joints to their controller
-    for jnt in pJointList:
-        if jnt == firstJoint or jnt == lastJoint:
-            continue
-        cmds.scaleConstraint(jnt + "_ctrl", jnt, mo=True)
+    for jnt in jointList[1:]:  # iterate thru all the joints except the first joint
+        cmds.aimConstraint(lastController, jnt)
+        cmds.connectAttr(distanceFactor + ".outputX", jnt + ".scaleX")
 
-    centerJoint = []
+    cmds.connectAttr(distanceFactor + ".outputX", helper1 + ".scaleX")
+    cmds.aimConstraint(lastController, helper1)
 
-    for jnt in pJointList:  # scale constrain all the joints to their controllers
-        cmds.scaleConstraint(jnt + "_ctrl", jnt, mo=True)
-
-    # determine if there is odd or even amount of joints
-    if len(pJointList) % 2 == 0:  # if even
-        centerIndex = [(len(pJointList) // 2) - 1, len(pJointList) // 2]
-
-        # scale constraint the offset groups of the controllers to locM and start/end controller
-        for x in range(len(controlCurveList)):
-            weight = 100 / centerIndex[0] * x
-            opWeight = abs(100 - weight)
-
-            if (
-                x == 0 or x == len(controlCurveList) - 1
-            ):  # skip the first and last controllers
-                continue
-            elif x < centerIndex[0]:  # if to the left of the center
-                cmds.scaleConstraint(
-                    pJointList[centerIndex[0]] + "_ctrl",
-                    firstJoint + "_ctrl",
-                    pJointList[x] + "_offset",
-                    mo=True,
-                )  # scale constrain the offset ctrl groups to the center controllers and start controller
-                cmds.setAttr(
-                    pJointList[x]
-                    + "_offset_scaleConstraint1."
-                    + pJointList[centerIndex[0]]
-                    + "_ctrlW0",
-                    weight,
-                )
-                cmds.setAttr(
-                    pJointList[x]
-                    + "_offset_scaleConstraint1."
-                    + firstJoint
-                    + "_ctrlW1",
-                    opWeight,
-                )
-            elif x > centerIndex[1]:  # if to the right of the center
-                cmds.scaleConstraint(
-                    pJointList[centerIndex[1]] + "_ctrl",
-                    lastJoint + "_ctrl",
-                    pJointList[x] + "_offset",
-                    mo=True,
-                )
-                cmds.setAttr(
-                    pJointList[x]
-                    + "_offset_scaleConstraint1."
-                    + pJointList[centerIndex[1]]
-                    + "_ctrlW0",
-                    weight,
-                )  # this is wrong
-                cmds.setAttr(
-                    pJointList[x] + "_offset_scaleConstraint1." + lastJoint + "_ctrlW1",
-                    opWeight,
-                )
-            else:  # if we are at the center joints
-                cmds.scaleConstraint(
-                    "Loc_M", pJointList[centerIndex[0]] + "_offset", mo=True
-                )
-                cmds.scaleConstraint(
-                    "Loc_M", pJointList[centerIndex[1]] + "_offset", mo=True
-                )
-
-            # calculate the distance from the center joint and then use that to determine the scale strength
+    if len(jointList) % 2 == 0:  # if even
+        centerIndex = [len(jointList) // 2, -1, len(jointList) // 2]
+        j = 3
 
     else:  # if odd
-        centerIndex = len(pJointList) // 2
+        centerIndex = [len(jointList) // 2, len(jointList) // 2]
+        j = 2
 
-        for x in range(len(controlCurveList)):
-            weight = (
-                100 / centerIndex * x
-            )  # this is wrong after we get to the right side
-            opWeight = abs(100 - weight)
+    for i in range(
+        1, len(jointList) - 1
+    ):  # only iterate thru the middle joints, not the end joints
+        if (
+            i <= centerIndex[0] or i <= centerIndex[1]
+        ):  # we are to the left or center of the chain
+            if i <= centerIndex[0]:  # if we are to the left of the chain
+                posFactor = i / centerIndex[0]
+            else:  # we are at the center of the chain
+                posFactor = 1
 
-            if (
-                x == 0 or x == len(controlCurveList) - 1
-            ):  # skip the first and last controllers
-                continue
-            elif x < centerIndex:  # if to the left of the center
-                cmds.scaleConstraint(
-                    pJointList[centerIndex] + "_ctrl",
-                    firstJoint + "_ctrl",
-                    pJointList[x] + "_offset",
-                    mo=True,
-                )
-                cmds.setAttr(
-                    pJointList[x]
-                    + "_offset_scaleConstraint1."
-                    + pJointList[centerIndex]
-                    + "_ctrlW0",
-                    weight,
-                )
-                cmds.setAttr(
-                    pJointList[x]
-                    + "_offset_scaleConstraint1."
-                    + firstJoint
-                    + "_ctrlW1",
-                    opWeight,
-                )
-            elif x > centerIndex:  # if to the right of the center
-                cmds.scaleConstraint(
-                    pJointList[centerIndex] + "_ctrl",
-                    lastJoint + "_ctrl",
-                    pJointList[x] + "_offset",
-                    mo=True,
-                )
-                cmds.setAttr(
-                    pJointList[x]
-                    + "_offset_scaleConstraint1."
-                    + pJointList[centerIndex]
-                    + "_ctrlW0",
-                    weight,
-                )  # this is wrong
-                cmds.setAttr(
-                    pJointList[x] + "_offset_scaleConstraint1." + lastJoint + "_ctrlW1",
-                    opWeight,
-                )
-            else:  # if we are at the center joints, skip
-                cmds.scaleConstraint(
-                    "Loc_M", pJointList[centerIndex] + "_offset", mo=True
-                )
+            uniScale = 2  # arbitrary number
 
-    # the middle has 100 scaling, as the joints get further away, the scaling influence decreases
+            multDiv = cmds.shadingNode(
+                "multiplyDivide", asUtility=True, n=systemName + "_multDiv"
+            )
+            cmds.setAttr(multDiv + ".input2X", posFactor)
+            cmds.connectAttr(invertIt + ".outputX", multDiv + ".input1X")
+            plusMinusAvg = cmds.shadingNode(
+                "plusMinusAverage", asUtility=True, n=systemName + "_plusMinusAvg"
+            )
+            cmds.setAttr(plusMinusAvg + ".operation", 2)
+            cmds.setAttr(plusMinusAvg + ".input2D[1].input2Dx", posFactor)
+            cmds.connectAttr(
+                multDiv + ".outputX", plusMinusAvg + ".input2D[0].input2Dx"
+            )
+            exponent = cmds.shadingNode(
+                "floatMath", asUtility=True, n=systemName + "_exponent1"
+            )
+            cmds.setAttr(exponent + ".floatA", uniScale)
+            cmds.setAttr(exponent + ".operation", 6)
+            cmds.connectAttr(plusMinusAvg + ".output2Dx", exponent + ".floatB")
+            cmds.connectAttr(exponent + ".outFloat", jointList[i] + ".scaleY")
+            cmds.connectAttr(exponent + ".outFloat", jointList[i] + ".scaleZ")
 
-    # GROUP EVERYTHING INTO stretchy_grp
-    # create group
-    stretchy_grp = cmds.group(
-        f"{pJointList[0]}_helper", "Loc_M_offset", n="stretchy_grp"
-    )
+            StretchySystem.append(exponent)
+            StretchySystem.append(plusMinusAvg)
+            StretchySystem.append(multDiv)
 
-    # add the controllers into it
-    for jnt in pJointList:
-        cmds.parent(jnt + "_offset", stretchy_grp)
+        else:  # we are to the right of the chain
+            exponent = systemName + "_exponent" + str(i - j)
+            j = j + 2
+            cmds.connectAttr(exponent + ".outFloat", jointList[i] + ".scaleY")
+            cmds.connectAttr(exponent + ".outFloat", jointList[i] + ".scaleZ")
+
+    StretchySystem.append(invertIt)
+    StretchySystem.append(distanceFactor)
+    StretchySystem.append(distanceNode)
 
     """These next lines are necessary to set up the deletion system"""
     # Add the name of the stretchy group to all joints affected
-    for jnt in pJointList:
+
+    StretchySystem.append(firstController + "_offset")
+    # StretchySystem.append(helper2)
+    # StretchySystem.append(helper1)
+
+    stretchy_grp = cmds.group(n=systemName, empty=True)
+    StretchySystem.append(stretchy_grp)
+
+    for jnt in jointList:
         cmds.addAttr(jnt, ln="parentSystem", dt="string")
         cmds.setAttr(f"{jnt}.parentSystem", stretchy_grp, type="string")
 
@@ -551,8 +455,8 @@ def create_stretchy_system(pTextField1, pTextField2, *pArgs):
     cmds.addAttr(stretchy_grp, ln="jointsAffected", dt="stringArray")
     cmds.setAttr(
         f"{stretchy_grp}.jointsAffected",
-        len(pJointList),
-        *pJointList,
+        len(jointList),
+        *jointList,
         type="stringArray",
     )
     print(cmds.getAttr(f"{stretchy_grp}.jointsAffected"))
