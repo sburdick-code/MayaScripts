@@ -1,3 +1,5 @@
+# Only works in Maya 2024+
+
 import maya.cmds as cmds
 import functools
 
@@ -235,15 +237,24 @@ def delete_stretchy_system(pStretchyComponent, *pArgs):
         jointsAffected = cmds.getAttr(f"{groupName}.jointsAffected")
         systemToDelete = cmds.getAttr(f"{groupName}.stretchySystem")
 
-        for jnt in jointsAffected:
-            cmds.deleteAttr(f"{jnt}.parentSystem")
-        cmds.delete(systemToDelete)
-
         helper1 = groupName + "_helper1_jnt"
         helper2 = groupName + "_helper2_jnt"
 
-        cmds.removeJoint(helper1)
-        cmds.removeJoint(helper2)
+        cmds.xform(f"{jointsAffected[-1]}_ctrl", t=[0, 0, 0])
+        print(f"Moved {jointsAffected[-1]}_ctrl to 0, 0, 0")
+        cmds.xform(f"{jointsAffected[0]}_ctrl", t=[0, 0, 0])
+        print(f"Moved {jointsAffected[0]}_ctrl to 0, 0, 0")
+
+        cmds.parent(jointsAffected[1], jointsAffected[0])
+        cmds.delete(f"{helper2}_parentConstraint1")
+
+        for jnt in jointsAffected:
+            cmds.deleteAttr(f"{jnt}.parentSystem")
+        print(systemToDelete)
+
+        cmds.delete(systemToDelete)
+        cmds.delete(helper1)
+        cmds.delete(helper2)
 
         print("\n\n### Stretchy System Deleted ###\n\n")
 
@@ -271,8 +282,8 @@ def createController(pName, pJoint):
     )  # c changes the shape of the cirlce, 0,0,0 ensures that it's a full circle
     cmds.rotate(0, 90, 0, newControl)
     offGrp = cmds.group(newControl, n=newControl[0] + "_offset")
-    cmds.move(loc[0], loc[1], loc[2], offGrp)
     cmds.makeIdentity(newControl, apply=True)
+    cmds.move(loc[0], loc[1], loc[2], offGrp)
     cmds.rotate(rot[0], rot[1], rot[2], offGrp)
     return newControl
 
@@ -312,37 +323,49 @@ def create_stretchy_system(pTextField1, pTextField2, pNameField, *pArgs):
 
     cmds.select(firstJnt, hi=True)
     jointList = cmds.ls(sl=True, type="joint")
+
     for j in range(len(jointList)):
         if jointList[j] == lastJnt:
             lastIndex = j
-    jointList = jointList[:lastIndex]
+    # TODO Why this?
+    # jointList = jointList[:lastIndex]
 
     if len(jointList) < 3:
         cmds.error("Not enough joints in chain (at least 3 required)", n=True)
 
     secondJnt = jointList[1]
 
+    # Get Parent Joint Location Data
     firstJntLoc = cmds.xform(firstJnt, q=True, t=True, ws=True)
     lastJntLoc = cmds.xform(lastJnt, q=True, t=True, ws=True)
+    firstJntRot = cmds.xform(firstJnt, q=True, ro=True, ws=True)
+    lastJntRot = cmds.xform(lastJnt, q=True, ro=True, ws=True)
 
+    # Create Helper Joints
     cmds.select(clear=True)
-    helper1 = cmds.joint(p=firstJntLoc, n=systemName + "_helper1_jnt")
+    helper1 = cmds.joint(p=firstJntLoc, o=firstJntRot, n=systemName + "_helper1_jnt")
     cmds.joint(helper1, e=True, zso=True, oj="xyz")
+    cmds.makeIdentity(helper1, r=True)
     cmds.select(clear=True)
-    helper2 = cmds.joint(p=lastJntLoc, n=systemName + "_helper2_jnt")
+    helper2 = cmds.joint(p=lastJntLoc, o=lastJntRot, n=systemName + "_helper2_jnt")
+    cmds.makeIdentity(helper1, r=True)
 
+    # Create Controllers
     firstController = createController(firstJnt, firstJnt)[0]
     lastController = createController(lastJnt, lastJnt)[0]
 
+    # Create Constraints
     cmds.pointConstraint(firstController, firstJnt)
     cmds.pointConstraint(lastController, lastJnt)
     cmds.parentConstraint(lastController, helper2)
 
+    # Parent Constraints
     cmds.parent(helper1, firstJnt)
     cmds.parent(helper2, firstJnt)
     cmds.parent(secondJnt, helper1)
     cmds.parent(lastController + "_offset", firstController)
 
+    # Setup Nodes to control Squash/Stretch Math
     distanceNode = cmds.shadingNode(
         "distanceBetween", asUtility=True, n=systemName + "_distanceBetween"
     )
@@ -601,7 +624,7 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
 
     middleLocList = []
     translationList = [firstLoc]
-    for i in range(number):
+    for i in range(number - 1):
         locator = cmds.listRelatives(pMiddleList[i])
         print(locator[0])
         translationList.append(
