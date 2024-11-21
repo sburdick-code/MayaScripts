@@ -44,15 +44,15 @@ def create_ui(pWindowTitle):
 
     ### EXISTING JOINT CHAIN ---------------------------------------------
     # First row ####################
-    cmds.text(label="EXISTING JOINT CHAIN", font="boldLabelFont")
+    cmds.separator(height=10)
 
     # Second row ####################
-    cmds.separator(height=10)
+    cmds.text(label="EXISTING JOINT CHAIN", font="boldLabelFont")
 
     # Third row ####################
     cmds.rowLayout(adj=3, numberOfColumns=4)
     cmds.separator(style="none", height=10, width=30)
-    cmds.text(label="Name:")
+    cmds.text(label="System Name:")
     nameField = cmds.textField(pht="Name", editable=True, aie=True)
     cmds.separator(style="none", height=10, width=30)
 
@@ -61,7 +61,7 @@ def create_ui(pWindowTitle):
     # Fourth row ####################
     cmds.rowLayout(adj=2, numberOfColumns=3)
     cmds.text(label="first")
-    originParentField = cmds.textField(pht="Origin Parent Joint", ed=True)
+    originParentField = cmds.textField(pht="First Joint in the Chain", ed=True)
     cmds.button(
         label="Select",
         command=functools.partial(get_selection, originParentField, "joint"),
@@ -71,8 +71,8 @@ def create_ui(pWindowTitle):
 
     # Fifth row ####################
     cmds.rowLayout(adj=2, numberOfColumns=3)
-    cmds.text(label="last")
-    insertionParentField = cmds.textField(pht="Insertion Parent Joint", ed=True)
+    cmds.text(label=" last")
+    insertionParentField = cmds.textField(pht="Last Joint In the Chain", ed=True)
     cmds.button(
         label="Select",
         command=functools.partial(get_selection, insertionParentField, "joint"),
@@ -84,10 +84,17 @@ def create_ui(pWindowTitle):
     cmds.button(
         label="Generate",
         command=functools.partial(
-            create_stretchy_system, originParentField, insertionParentField, nameField
+            create_stretchy_system,
+            originParentField,
+            insertionParentField,
+            nameField,
+            True,
         ),
     )  # change this after create_stretchy_system edits
     # cmds.button( label='Help', command=functools.partial( display_Help_UI ) )
+
+    cmds.separator(height=10)
+    cmds.separator(style="none", height=30, width=30)
 
     ### NEW JOINT CHAIN ---------------------------------------------
     # ROW 01 ---------------------------
@@ -105,11 +112,19 @@ def create_ui(pWindowTitle):
     # ROW 05 ---------------------------
     cmds.rowLayout(adj=3, numberOfColumns=4)
     cmds.separator(style="none", height=10, width=30)
-    cmds.text(label="Name:")
-    genNameTextField = cmds.textField(pht="Joint Names", editable=True, aie=True)
+    cmds.text(label=" Joint Names:")
+    genJointNameTextField = cmds.textField(pht="Joint Names", editable=True, aie=True)
     cmds.separator(style="none", height=10, width=30)
 
-    # ROW 06 --------------------------
+    # ROW 06 ---------------------------
+    cmds.setParent("..")
+    cmds.rowLayout(adj=3, numberOfColumns=4)
+    cmds.separator(style="none", height=10, width=30)
+    cmds.text(label="System Name:")
+    genSystemNameTextField = cmds.textField(pht="System Name", editable=True, aie=True)
+    cmds.separator(style="none", height=10, width=30)
+
+    # ROW 07 --------------------------
     cmds.setParent("..")
     cmds.rowLayout(adj=3, numberOfColumns=6)
     cmds.text(label="Segment Count:")
@@ -122,40 +137,44 @@ def create_ui(pWindowTitle):
         command=functools.partial(get_selection, genJointParentField, "joint"),
     )
 
-    # ROW 07 --------------------------
+    # ROW 08 --------------------------
     cmds.setParent("..")
     cmds.separator(style="none", height=10)
 
-    # ROW 08 --------------------------
+    # ROW 09 --------------------------
     cmds.text(label="2. Placement Locators")
 
-    # ROW 09 --------------------------
+    # ROW 10 --------------------------
     cmds.button(
         label="Create and Set Placement Locators",
         command=functools.partial(
             create_placement_locators,
-            genNameTextField,
+            genJointNameTextField,
             genJointCountField,
             genJointParentField,
         ),
     )
 
-    # ROW 10 --------------------------
+    # ROW 11 --------------------------
     cmds.separator(style="none", height=10)
 
-    # ROW 11 --------------------------
+    # ROW 12 --------------------------
     cmds.text(label="3. Create System")
 
-    # ROW 12 --------------------------
+    # ROW 13 --------------------------
     cmds.button(
         label="Generate",
         command=functools.partial(
             create_jointchain_at_locators,
-            genNameTextField,
+            genJointNameTextField,
+            genSystemNameTextField,
             genJointCountField,
             genJointParentField,
         ),
     )
+
+    cmds.separator(height=10)
+    cmds.separator(style="none", height=30, width=30)
 
     ### DELETE FUNCTION ---------------------------------------------
     # ROW 01 ---------------------------
@@ -248,15 +267,17 @@ def delete_stretchy_system(pStretchyComponent, *pArgs):
         cmds.parent(jointsAffected[1], jointsAffected[0])
         cmds.delete(f"{helper2}_parentConstraint1")
 
-        for jnt in jointsAffected:
-            cmds.deleteAttr(f"{jnt}.parentSystem")
         print(systemToDelete)
 
         cmds.delete(systemToDelete)
         cmds.delete(helper1)
         cmds.delete(helper2)
 
-        print("\n\n### Stretchy System Deleted ###\n\n")
+        for jnt in jointsAffected:
+            cmds.deleteAttr(f"{jnt}.parentSystem")
+            cmds.xform(jnt, scale=[1, 1, 1])
+
+        print(f"\n\n### Stretchy System {groupName} Deleted ###\n\n")
 
     else:
         cmds.error("Selected joint is not part of a stretchy system!", n=True)
@@ -288,14 +309,15 @@ def createController(pName, pJoint):
     return newControl
 
 
-def create_stretchy_system(pTextField1, pTextField2, pNameField, *pArgs):
+def create_stretchy_system(pTextField1, pTextField2, pNameField, fromUI=True, *pArgs):
     """
     Receives the start and end joints in a chain and then produces a stretchy rigging system for them.
 
     Args:
-        pTextField1 (cmds.textField): A text field containing the name of the joint structure.
-        pTextField2 (cmds.textField): A textfield containing the number of locators/joints to be created.
-        pNameField (cmds.textField): A textfield containing the name of the system to be created
+        pTextField1 (cmds.textField OR string): A text field containing the name of the joint structure.
+        pTextField2 (cmds.textField OR string): A textfield containing the number of locators/joints to be created.
+        pNameField (cmds.textField OR string): A textfield containing the name of the system to be created
+        friomUI (bool): A boolean that when True unpackages the text fields, when false treats them as strings.
 
     Returns:
         None: This function does not return a value.
@@ -308,10 +330,14 @@ def create_stretchy_system(pTextField1, pTextField2, pNameField, *pArgs):
 
     # Add any nodes created for the stretchy system to this variable, do not add skin joints
     StretchySystem = []
-    systemName = cmds.textField(pNameField, query=True, text=True)
-
-    firstJnt = cmds.textField(pTextField1, query=True, text=True)
-    lastJnt = cmds.textField(pTextField2, query=True, text=True)
+    if fromUI:
+        systemName = cmds.textField(pNameField, query=True, text=True)
+        firstJnt = cmds.textField(pTextField1, query=True, text=True)
+        lastJnt = cmds.textField(pTextField2, query=True, text=True)
+    else:
+        systemName = pNameField
+        firstJnt = pTextField1
+        lastJnt = pTextField2
 
     if not cmds.objExists(firstJnt) or not cmds.objExists(lastJnt):
         cmds.error(f"{firstJnt} and {lastJnt} don't exist!", n=True)
@@ -583,7 +609,9 @@ def create_placement_locators(pNameField, pNumberField, pParentJoint, *pArgs):
     cmds.parent(successGroup, locatorGroup)
 
 
-def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs):
+def create_jointchain_at_locators(
+    pNameField, pSystemNameField, pNumberField, pParentJoint, *pArgs
+):
     """
     From a set of locators, this function creates a joint chain at their locations. The name of the joints are determined by pNameField.
 
@@ -600,6 +628,7 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
             - "Locators Not Created!" If the locators do not exist.
     """
 
+    # If the object NameField_SuccessGroup Does not exist, then do not continue.
     if not (
         cmds.objExists(
             (cmds.textField(pNameField, query=True, text=True)) + "_SuccessGroup"
@@ -608,10 +637,13 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
         cmds.error("Locators Not Created!", n=True)
         return 0
 
+    # Set the name, number, and parent joint name
     pName = cmds.textField(pNameField, query=True, text=True)
+    pSystemName = cmds.textField(pSystemNameField, query=True, text=True)
     number = int(cmds.textField(pNumberField, query=True, text=True))
     parentJoint = cmds.textField(pParentJoint, query=True, text=True)
 
+    # get the placement locators
     pFirstPL = pName + "_firstPlacement"
     pLastPL = pName + "_lastPlacement"
     pMiddleList = cmds.listRelatives(pName + "_middle_off")
@@ -624,7 +656,9 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
 
     middleLocList = []
     translationList = [firstLoc]
-    for i in range(number - 1):
+
+    print(number)
+    for i in range(number - 2):
         locator = cmds.listRelatives(pMiddleList[i])
         print(locator[0])
         translationList.append(
@@ -639,10 +673,14 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
 
     middleRotList = []
     rotationList = [firstRot]
-    for i in range(number):
+    for i in range(number - 2):
+        locator = cmds.listRelatives(pMiddleList[i])
         rotationList.append(
             cmds.xform(
-                cmds.listRelatives(pMiddleList[i]), query=True, rotation=True, ws=True
+                locator[0],
+                query=True,
+                rotation=True,
+                ws=True,
             )
         )
 
@@ -655,7 +693,7 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
     firstJoint = cmds.joint(name=pName + "_01")
     jointList = [firstJoint]
 
-    for i in range(number):
+    for i in range(number - 2):
         jointList.append(cmds.joint(name=pName + "_" + str(i + 2).zfill(2)))
 
     lastJoint = cmds.joint(name=pName + "_" + str(number + 2).zfill(2))
@@ -663,13 +701,27 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
     jointList.append(lastJoint)
 
     # Move the joints to the proper location
+    print(len(jointList))
+    print(jointList)
     for num in range(len(jointList)):
+        print(
+            f"iter: {num}:\njointList: {jointList[num]}\ntranslationList: {translationList[num]}\nRotationList: {rotationList[num]}"
+        )
+
         cmds.xform(
             jointList[num],
             ws=True,
             translation=translationList[num],
             rotation=rotationList[num],
         )
+
+    # Orient joints to point X axis down the bone
+    for jnt in jointList:
+        cmds.joint(
+            jnt, edit=True, zso=True, orientJoint="xyz", secondaryAxisOrient="yup"
+        )
+    tempConstraint = cmds.orientConstraint(jointList[-2], lastJoint)
+    cmds.delete(tempConstraint)
 
     # Get the parent group of the locators and delete it
     parentGroup = cmds.listRelatives(
@@ -681,7 +733,7 @@ def create_jointchain_at_locators(pNameField, pNumberField, pParentJoint, *pArgs
 
     cmds.parent(firstJoint, parentJoint)
 
-    # create_stretchy_system( jointList )
+    create_stretchy_system(firstJoint, lastJoint, pSystemName, False)
 
 
 ### MAIN ###
