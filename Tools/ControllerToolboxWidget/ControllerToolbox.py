@@ -1,15 +1,23 @@
 try:
     from PySide2 import QtCore, QtWidgets, QtUiTools, QtGui
+    from PySide2.QtWidgets import QAction
     from shiboken2 import wrapInstance
 except:
     from PySide6 import QtCore, QtWidgets, QtUiTools, QtGui
+    from PySide6.QtGui import QAction
     from shiboken6 import wrapInstance
 
 import sys
 import os
 import maya.OpenMayaUI as omui
 import maya.cmds as cmds
-import json
+
+from Tools.ControllerToolboxWidget.Const import Const
+from Tools.ControllerToolboxWidget import curveTools
+from Tools.ControllerToolboxWidget.HelperDialogs import (
+    CreateNewCurveDialog,
+    RenameDialog,
+)
 
 
 def mayaMainWindow():
@@ -17,167 +25,10 @@ def mayaMainWindow():
     return wrapInstance(int(mainWindowPtr), QtWidgets.QWidget)
 
 
-class CreateNewCurveDialog(QtWidgets.QDialog):
-    WORKING_DIR = "Z:\Projects\MayaScripts\Tools\ControllerToolboxWidget"  # TODO Switch with this: os.path.dirname(__file__)
-    TEMP_IMAGE_PATH = WORKING_DIR + "\controller_data\\tempCapture.png"
-    UI_PATH = WORKING_DIR + "\\ui\\CreateNewCurveDialog.ui"
-
-    def __init__(self, parent=None):
-        super(CreateNewCurveDialog, self).__init__(parent)
-
-        self.parent = parent
-        self.setWindowTitle("Create New Curve")
-        self.setMinimumSize(172, 300)
-        self.setMaximumSize(172, 300)
-
-        if sys.platform == "darwin":
-            self.setWindowFlag(QtCore.Qt.Tool, True)
-
-        self.initUI()
-        self.createConnections()
-
-    def initUI(self):
-        loader = QtUiTools.QUiLoader()
-        self.ui = loader.load(self.UI_PATH, parentWidget=self)
-        self.setLayout(self.ui.layout())
-
-    def createConnections(self):
-        self.ui.snapshotButton.clicked.connect(self.capture_viewport)
-        self.ui.saveCancelButtons.accepted.connect(self.on_accepted)
-        self.ui.saveCancelButtons.rejected.connect(self.close)
-
-    def on_accepted(self):
-
-        # Check if a temp capture was created
-        if not os.path.exists(self.TEMP_IMAGE_PATH):
-            cmds.error("Please take a snapshot of the curve.")
-            return
-
-        # Check if the user has added a name for the curve
-        if not self.ui.nameLineEdit.text():
-            cmds.error("Please add a name for the curve.")
-            return
-
-        # Validate the selection
-        selection = cmds.ls(selection=True)
-
-        if len(selection) == 1:
-            if cmds.objectType(selection[0]) == "transform":
-                children = cmds.listRelatives(c=True)
-
-                for child in children:
-                    if (
-                        cmds.objectType(child) == "nurbsCurve"
-                        or cmds.objectType(child) == "bezierCurve"
-                    ):
-                        self.save_curve(child, self.ui.nameLineEdit.text())
-                        # Re-enable the parent widget
-                        self.parent.setEnabled(True)
-                        # Close this dialog
-                        self.close()
-                    else:
-                        cmds.error(
-                            "Invalid object. Object must be of type nurbsCurve or bezierCurve",
-                            n=True,
-                        )
-                        return
-
-            elif (
-                cmds.objectType(selection) == "nurbsCurve"
-                or cmds.objectType(selection) == "bezierCurve"
-            ):
-                self.save_curve(selection[0], self.ui.nameLineEdit.text())
-                # Re-enable the parent widget
-                self.parent.setEnabled(True)
-                # Close this dialog
-                self.close()
-
-            else:
-                cmds.error(
-                    "Invalid object. Object must be of type nurbsCurve or bezierCurve",
-                    n=True,
-                )
-        else:
-            cmds.error("Please select one object", n=True)
-            return
-
-    def capture_viewport(self):
-        # Capture the viewport as a 128x128 png named tempCapture.png
-        curFrame = int(cmds.currentTime(query=True))
-        cmds.playblast(
-            fr=curFrame,
-            v=False,
-            fmt="image",
-            c="png",
-            orn=False,
-            cf=self.TEMP_IMAGE_PATH,
-            wh=[128, 128],
-            p=100,
-        )
-        print(f"Snapshot saved as: {self.TEMP_IMAGE_PATH}")
-
-        # Set the playblast as the image for the imageFrame
-        pixmap = QtGui.QPixmap(self.TEMP_IMAGE_PATH)
-        pixmap = pixmap.scaled(150, 150, QtCore.Qt.IgnoreAspectRatio)
-        self.ui.imageFrame.setPixmap(pixmap)
-
-    def save_curve(self, obj, curve_name):
-        # Rename the temp capture to the curve name
-        png_path = f"{self.WORKING_DIR}\\controller_data\\{curve_name}.png"
-        os.rename(self.TEMP_IMAGE_PATH, png_path)
-
-        cv_data = []
-        cv_count = cmds.getAttr(f"{obj}.spans") + cmds.getAttr(f"{obj}.degree")
-        degree = cmds.getAttr(f"{obj}.degree")
-
-        for i in range(cv_count):
-            cv_data.append(cmds.getAttr(f"{obj}.cv[{i}]")[0])
-
-        json_data = {"name": curve_name, "degree": degree, "CVs": cv_data}
-
-        try:
-            with open(
-                self.WORKING_DIR + "\\controller_data\\" + curve_name + ".json", "w"
-            ) as curve_file:
-                json.dump(json_data, curve_file)
-            print(f"Saved to : {self.WORKING_DIR}\\controller_data\\{curve_name}.json")
-
-            self.parent.populate_table()
-        except:
-            cmds.error(f"Could not save : {curve_name}.json")
-            os.remove(png_path)
-
-    def closeEvent(self, event: QtGui.QCloseEvent):
-        """
-        Override the close event so the parent widget can be re-enabled
-        """
-        # Delete the temp image if it exists
-        if os.path.exists(self.TEMP_IMAGE_PATH):
-            os.remove(self.TEMP_IMAGE_PATH)
-
-        # Re-enable the parent widget
-        self.parent.setEnabled(True)
-
-        # Close this dialog
-        self.close()
-
-
 class ControllerToolbox(QtWidgets.QDialog):
-    WORKING_DIR = "Z:\Projects\MayaScripts\Tools\ControllerToolboxWidget"  # TODO Switch with this: os.path.dirname(__file__)
-    CONTROLLER_DATA_DIR = WORKING_DIR + "\controller_data"
-    UI_PATH = WORKING_DIR + "\\ui\\ControllerToolbox.ui"
-    dlgInstance = None
 
-    @classmethod
-    def showDialog(cls):
-        if not cls.dlgInstance:
-            cls.dlgInstance = ControllerToolbox()
-
-        if cls.dlgInstance.isHidden():
-            cls.dlgInstance.show()
-        else:
-            cls.dlgInstance.raise_()
-            cls.dlgInstance.activateWindow()
+    # custom resized signal
+    resized = QtCore.Signal()
 
     def __init__(self, parent=mayaMainWindow()):
         super(ControllerToolbox, self).__init__(parent)
@@ -185,6 +36,9 @@ class ControllerToolbox(QtWidgets.QDialog):
         self.setWindowTitle("Controller Toolbox")
         self.setMinimumSize(620, 450)
         self.resize(620, 450)
+
+        self.CreateDialog = None
+        self.RenameDialog = None
 
         # On macOS make the window a Tool to keep it on top of Maya
         if sys.platform == "darwin":
@@ -194,17 +48,24 @@ class ControllerToolbox(QtWidgets.QDialog):
         self.createConnections()
 
     def initUI(self):
+        """
+        Load up the widget UI from the .ui file
+        """
         loader = QtUiTools.QUiLoader()
-        self.ui = loader.load(self.UI_PATH, parentWidget=self)
+        self.ui = loader.load(
+            (Const.UI_DIR + "ControllerToolbox.ui"), parentWidget=self
+        )
         self.setLayout(self.ui.layout())
         self.populate_table()
 
     def createConnections(self):
-        # Create Button
-        self.ui.createButton.clicked.connect(self.on_createButton_clicked)
+        """
+        Create necessary connections for the ui
+        """
 
-        # Swap Button
-        self.ui.swapButton.clicked.connect(self.on_swapButton_clicked)
+        # Search Functionality
+        self.ui.searchButton.clicked.connect(self.on_searchButton_clicked)
+        self.ui.searchLineEdit.returnPressed.connect(self.on_searchButton_clicked)
 
         # Color Section
         self.ui.colorPickerButton.clicked.connect(self.on_color_changed)
@@ -229,9 +90,35 @@ class ControllerToolbox(QtWidgets.QDialog):
         self.ui.rotateZUpButton.clicked.connect(self.on_rotateButton_clicked)
         self.ui.rotateZLineEdit.returnPressed.connect(self.on_rotateButton_clicked)
 
-        # Search Functionality
-        self.ui.searchButton.clicked.connect(self.on_searchButton_clicked)
-        self.ui.searchLineEdit.returnPressed.connect(self.on_searchButton_clicked)
+        # Create Button
+        self.ui.createButton.clicked.connect(self.on_createButton_clicked)
+
+        # Swap Button
+        self.ui.swapButton.clicked.connect(self.on_swapButton_clicked)
+
+        # Table Widget Context Menu
+        self.ui.imageTable.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.ui.imageTable.customContextMenuRequested.connect(self.show_context_menu)
+
+        # Resize window
+        self.resized.connect(self.populate_table)
+
+    def resizeEvent(self, event):
+        """
+        Override the resize event so any the table repopulates over a certain window sizes
+        """
+        self.resized.emit()
+        return super(ControllerToolbox, self).resizeEvent(event)
+
+    def closeEvent(self, event: QtGui.QCloseEvent):
+        """
+        Override the close event so any extra child widgets will also close
+        """
+        # Close any extra widgets if they're open
+        if self.CreateDialog is not None:
+            self.CreateDialog.close()
+        if self.RenameDialog is not None:
+            self.RenameDialog.close()
 
     def populate_table(self, is_searching=False):
         """
@@ -249,8 +136,15 @@ class ControllerToolbox(QtWidgets.QDialog):
         i = 0
         j = 0
 
+        # Calculate the number of columns based on the window's size
+        size_tuple = self.size().toTuple()
+        size_x = size_tuple[0]
+        table_width = size_x - 236
+        column_count = (table_width / 128) // 1
+        self.model.setColumnCount(column_count)
+
         # Populate the table with data from the controller data directory
-        for fn in os.listdir(self.CONTROLLER_DATA_DIR):
+        for fn in os.listdir(Const.CTRL_DATA_DIR):
             if fn.endswith(".json"):
 
                 # Get the display name
@@ -258,14 +152,12 @@ class ControllerToolbox(QtWidgets.QDialog):
 
                 # If you are searching the table, only populate it with text in the search query
                 if is_searching:
-                    print("CHECK 04")
                     if not (self.ui.searchLineEdit.text() in name):
-                        print("CHECK 05")
                         continue
 
                 # Check if there is an image for the controller if not, don't set an icon
                 try:
-                    image_path = f"{self.CONTROLLER_DATA_DIR}\\{name}.png"
+                    image_path = f"{Const.CTRL_DATA_DIR}{name}.png"
                     pixmap = QtGui.QPixmap(image_path)
                     pixmap = pixmap.scaled(128, 128, QtCore.Qt.IgnoreAspectRatio)
                     icon = QtGui.QBrush(pixmap)
@@ -282,8 +174,8 @@ class ControllerToolbox(QtWidgets.QDialog):
 
                 self.model.setItem(i, j, item)
 
-                # Increment the indexes. Keep the columns to 3 total. Rows can be infinite.
-                if j == 2:
+                # Increment the indexes. Rows can be infinite.
+                if j >= (column_count - 1):
                     i += 1
                     j = 0
 
@@ -309,11 +201,22 @@ class ControllerToolbox(QtWidgets.QDialog):
         add_button.clicked.connect(self.on_addButton_clicked)
 
     def on_createButton_clicked(self):
-        selection_model = self.ui.imageTable.selectionModel()
-        selected_indexes = selection_model.selectedIndexes()
+        """
+        Create a new curve from the selection table and add all the attributes selected.
+        """
+        try:
+            selection_model = self.ui.imageTable.selectionModel()
+            selected_indexes = selection_model.selectedIndexes()
 
-        selected_curve = selected_indexes[0].data(QtCore.Qt.DisplayRole)
-        new_curve = self.load_curve(selected_curve)
+            selected_curve = selected_indexes[0].data(QtCore.Qt.DisplayRole)
+        except:
+            cmds.warning("Please select a curve from the table to create.")
+
+        new_curve = curveTools.load_curve(selected_curve)
+
+        if not new_curve:
+            cmds.warning("Could not create curve, incorrect data!")
+            return
 
         # Set the new curve's color
         cmds.setAttr(f"{new_curve}.overrideEnabled", 1)
@@ -326,44 +229,162 @@ class ControllerToolbox(QtWidgets.QDialog):
         )
 
         # Set the new curve's scale
-        # TODO setup appropriate checks!
-        cmds.setAttr(
-            f"{new_curve}.scale",
-            float(self.ui.scaleLineEdit.text()),
-            float(self.ui.scaleLineEdit.text()),
-            float(self.ui.scaleLineEdit.text()),
-        )
+        try:
+            if float(self.ui.scaleLineEdit.text()) <= 0.0:
+                cmds.warning("Cannot create curve : Scale must be greater than 0")
+                cmds.delete(new_curve)
+                return
+            else:
+                cmds.setAttr(
+                    f"{new_curve}.scale",
+                    float(self.ui.scaleLineEdit.text()),
+                    float(self.ui.scaleLineEdit.text()),
+                    float(self.ui.scaleLineEdit.text()),
+                )
+                cmds.makeIdentity(new_curve, apply=True)
+        except:
+            cmds.warning("Cannot create curve : Scale must be a numeric value!")
+            cmds.delete(new_curve)
+            return
 
         # Set the new curve's rotation
-        # TODO setup appropriate checks!
-        cmds.setAttr(
-            f"{new_curve}.rotate",
-            float(self.ui.rotateXLineEdit.text()),
-            float(self.ui.rotateYLineEdit.text()),
-            float(self.ui.rotateZLineEdit.text()),
-        )
-        cmds.makeIdentity(new_curve, apply=True)
+        try:
+            cmds.setAttr(
+                f"{new_curve}.rotate",
+                float(self.ui.rotateXLineEdit.text()),
+                float(self.ui.rotateYLineEdit.text()),
+                float(self.ui.rotateZLineEdit.text()),
+            )
+            cmds.makeIdentity(new_curve, apply=True)
+        except:
+            cmds.warning("Cannot create curve : Rotation must be a numeric value!")
+            cmds.delete(new_curve)
+            return
 
         # Add custom attributes
+        ## Scale
         cmds.addAttr(
             new_curve,
             longName="defaultScale",
             shortName="dScale",
             attributeType="double",
-            dv=1,
+            dv=float(self.ui.scaleLineEdit.text()),
+        )
+        ## Rotate
+        cmds.addAttr(
+            new_curve,
+            longName="defaultRotation",
+            shortName="dRot",
+            attributeType="float3",
+        )
+        cmds.addAttr(
+            longName="dRotateX",
+            attributeType="float",
+            parent="defaultRotation",
+            dv=float(self.ui.rotateXLineEdit.text()),
+        )
+        cmds.addAttr(
+            longName="dRotateY",
+            attributeType="float",
+            parent="defaultRotation",
+            dv=float(self.ui.rotateYLineEdit.text()),
+        )
+        cmds.addAttr(
+            longName="dRotateZ",
+            attributeType="float",
+            parent="defaultRotation",
+            dv=float(self.ui.rotateZLineEdit.text()),
         )
 
     def on_swapButton_clicked(self):
-        print("TODO Swap Button")
+        """
+        Swap the old curve shape for the selected curve in the selection window.
+        """
         # Get the selection
-        # For Loop iterate thru the selection
-        #   Get the attributes from the curve (Name, Trans, Rot, Scale)
-        #   Get the parent and children of the curve
-        #   Delete the curve
-        #   Create the new curve while maintaining the hierarchy (Think offset groups parents or children)
-        #   Apply the attributes (Name, Trans, Rot, Scale)
+        selection = cmds.ls(selection=True)
+
+        for transform in selection:
+
+            # Create a new curve
+            selection_model = self.ui.imageTable.selectionModel()
+            selected_indexes = selection_model.selectedIndexes()
+            selected_curve = selected_indexes[0].data(QtCore.Qt.DisplayRole)
+            new_curve_transform = curveTools.load_curve(selected_curve)
+
+            # Get the curve objects - children of the transforms
+            new_curve = cmds.listRelatives(new_curve_transform, children=True)
+            old_curve = cmds.listRelatives(transform, children=True)
+
+            # Set the new curve's location
+            if cmds.xform(transform, t=True, q=True) == [0, 0, 0]:
+                cmds.matchTransform(new_curve_transform, transform, pos=True)
+
+            # Set the new curve's scale
+            try:
+                scale_mod = cmds.getAttr(f"{transform}.defaultScale")
+            except:
+                print("No defaultScale attribute on swapped out curve")
+                scale_mod = 1
+                cmds.addAttr(
+                    transform,
+                    longName="defaultScale",
+                    shortName="dScale",
+                    attributeType="double",
+                    dv=1,
+                )
+
+            cmds.xform(new_curve_transform, scale=[scale_mod, scale_mod, scale_mod])
+
+            # Set the new curve's rotate
+            try:
+                rot_mod = cmds.getAttr(f"{transform}.defaultRotation")[0]
+            except:
+                print("No defaultRotation attribute on swapped out curve")
+                rot_mod = [0, 0, 0]
+                cmds.addAttr(
+                    new_curve,
+                    longName="defaultRotation",
+                    shortName="dRot",
+                    attributeType="float3",
+                )
+                cmds.addAttr(
+                    longName="dRotateX",
+                    attributeType="float",
+                    parent="defaultRotation",
+                    dv=0.0,
+                )
+                cmds.addAttr(
+                    longName="dRotateY",
+                    attributeType="float",
+                    parent="defaultRotation",
+                    dv=0.0,
+                )
+                cmds.addAttr(
+                    longName="dRotateZ",
+                    attributeType="float",
+                    parent="defaultRotation",
+                    dv=0.0,
+                )
+
+            cmds.xform(new_curve_transform, rotation=rot_mod)
+
+            # Freeze transformations on the new curve
+            cmds.makeIdentity(new_curve_transform, a=True)
+
+            # Parent the new curve under the old curve's transform
+            cmds.parent(new_curve, transform, r=True, s=True)
+
+            # # Delete the old curve and the new curve transform
+            cmds.delete(new_curve_transform)
+            cmds.delete(old_curve)
+
+        cmds.select(selection)
 
     def on_color_changed(self):
+        """
+        Whenever any change is made to the color, update the UI to reflect
+        this change.
+        """
 
         # Check if the sender was the colorPickerButton
         if self.sender() == self.ui.colorPickerButton:
@@ -407,18 +428,21 @@ class ControllerToolbox(QtWidgets.QDialog):
             hex_list = list(hex_string)
             rgb = []
 
-            if len(hex_string) == 6:
-                for i in range(3):
-                    first = hex_list.pop(0)
-                    second = hex_list.pop(0)
-                    rgb.append(int(f"{first}{second}", 16))
+            try:
+                if len(hex_string) == 6:
+                    for i in range(3):
+                        first = hex_list.pop(0)
+                        second = hex_list.pop(0)
+                        rgb.append(int(f"{first}{second}", 16))
 
-                self.ui.rSpinBox.setValue(rgb[0])
-                self.ui.gSpinBox.setValue(rgb[1])
-                self.ui.bSpinBox.setValue(rgb[2])
-                self.ui.colorPickerButton.setStyleSheet(
-                    f"background-color: rgb({rgb[0]}, {rgb[1]}, {rgb[2]})"
-                )
+                    self.ui.rSpinBox.setValue(rgb[0])
+                    self.ui.gSpinBox.setValue(rgb[1])
+                    self.ui.bSpinBox.setValue(rgb[2])
+                    self.ui.colorPickerButton.setStyleSheet(
+                        f"background-color: rgb({rgb[0]}, {rgb[1]}, {rgb[2]})"
+                    )
+            except:
+                cmds.warning("Invalid Hex value")
 
         # Check if there is a selected curve, then change its color
         selection = cmds.ls(selection=True)
@@ -442,6 +466,7 @@ class ControllerToolbox(QtWidgets.QDialog):
         """
         Scales all items in the selection list up or down
         """
+
         selection = cmds.ls(selection=True)
 
         # Filter the selection so only nurbsCurves will be edited
@@ -450,6 +475,7 @@ class ControllerToolbox(QtWidgets.QDialog):
                 curve_transform, children=True, type="nurbsCurve"
             )
             if children is not None:
+
                 current_scale = cmds.getAttr(f"{curve_transform}.scale")
 
                 # All objects edited/created by this tool should have an attribute defaultScale to track their initial starting size
@@ -469,26 +495,39 @@ class ControllerToolbox(QtWidgets.QDialog):
                 if self.sender() == self.ui.scaleUpButton:
                     cmds.setAttr(
                         f"{curve_transform}.scale",
-                        current_scale[0][0] + 0.1,
-                        current_scale[0][1] + 0.1,
-                        current_scale[0][2] + 0.1,
+                        current_scale[0][0] * ((scale_mod + 0.1) / scale_mod),
+                        current_scale[0][1] * ((scale_mod + 0.1) / scale_mod),
+                        current_scale[0][2] * ((scale_mod + 0.1) / scale_mod),
                     )
                     cmds.makeIdentity(curve_transform, apply=True)
+                    cmds.setAttr(
+                        f"{curve_transform}.defaultScale",
+                        (scale_mod + 0.1),
+                    )
+                    self.ui.scaleLineEdit.setText(f"{(scale_mod + 0.1):.2f}")
 
                 # Check if the sender was the scaleDownButton
                 elif self.sender() == self.ui.scaleDownButton:
                     cmds.setAttr(
                         f"{curve_transform}.scale",
-                        current_scale[0][0] - 0.1,
-                        current_scale[0][1] - 0.1,
-                        current_scale[0][2] - 0.1,
+                        current_scale[0][0] * ((scale_mod - 0.1) / scale_mod),
+                        current_scale[0][1] * ((scale_mod - 0.1) / scale_mod),
+                        current_scale[0][2] * ((scale_mod - 0.1) / scale_mod),
                     )
                     cmds.makeIdentity(curve_transform, apply=True)
+                    cmds.setAttr(
+                        f"{curve_transform}.defaultScale",
+                        (scale_mod - 0.1),
+                    )
+                    self.ui.scaleLineEdit.setText(f"{(scale_mod - 0.1):.2f}")
 
                 # Check if the sender was the scaleLineEdit
                 elif self.sender() == self.ui.scaleLineEdit:
-
-                    user_scale = float(self.ui.scaleLineEdit.text())
+                    try:
+                        user_scale = float(self.ui.scaleLineEdit.text())
+                    except:
+                        cmds.warning("Scale must be a numeric value!")
+                        return
 
                     cmds.setAttr(
                         f"{curve_transform}.scale",
@@ -514,85 +553,201 @@ class ControllerToolbox(QtWidgets.QDialog):
 
             if children is not None:
 
-                # Check if the sender was the rotateXDownButton
-                if self.sender() == self.ui.rotateXDownButton:
-                    cmds.setAttr(f"{curve_transform}.rotateX", -1 * rot_value)
-                # Check if the sender was the rotateXUpButton
-                elif self.sender() == self.ui.rotateXUpButton:
-                    cmds.setAttr(f"{curve_transform}.rotateX", rot_value)
-                # Check if the sender was the rotateXLineEdit
-                elif self.sender() == self.ui.rotateXLineEdit:
-                    cmds.setAttr(
-                        f"{curve_transform}.rotateX",
-                        float(self.ui.rotateXLineEdit.text()),
+                # All objects edited/created by this tool should have an attribute defaultRotation to track their initial starting rotation
+                try:
+                    rot_mod = cmds.getAttr(f"{curve_transform}.defaultRotation")[0]
+                except:
+                    cmds.addAttr(
+                        curve_transform,
+                        longName="defaultRotation",
+                        shortName="dRot",
+                        attributeType="float3",
                     )
 
-                # Check if the sender was the rotateYDownButton
-                elif self.sender() == self.ui.rotateYDownButton:
-                    cmds.setAttr(f"{curve_transform}.rotateY", -1 * rot_value)
-                # Check if the sender was the rotateYUpButton
-                elif self.sender() == self.ui.rotateYUpButton:
-                    cmds.setAttr(f"{curve_transform}.rotateY", rot_value)
-                # Check if the sender was the rotateYLineEdit
-                elif self.sender() == self.ui.rotateXLineEdit:
-                    cmds.setAttr(
-                        f"{curve_transform}.rotateY",
-                        float(self.ui.rotateYLineEdit.text()),
+                    cmds.addAttr(
+                        longName="dRotateX",
+                        attributeType="float",
+                        parent="defaultRotation",
                     )
-
-                # Check if the sender was the rotateZDownButton
-                elif self.sender() == self.ui.rotateZDownButton:
-                    cmds.setAttr(f"{curve_transform}.rotateZ", -1 * rot_value)
-                # Check if the sender was the rotateZUpButton
-                elif self.sender() == self.ui.rotateZUpButton:
-                    cmds.setAttr(f"{curve_transform}.rotateZ", rot_value)
-                # Check if the sender was the rotateZLineEdit
-                elif self.sender() == self.ui.rotateZLineEdit:
-                    cmds.setAttr(
-                        f"{curve_transform}.rotateZ",
-                        float(self.ui.rotateZLineEdit.text()),
+                    cmds.addAttr(
+                        longName="dRotateY",
+                        attributeType="float",
+                        parent="defaultRotation",
                     )
+                    cmds.addAttr(
+                        longName="dRotateZ",
+                        attributeType="float",
+                        parent="defaultRotation",
+                    )
+                    rot_mod = cmds.getAttr(f"{curve_transform}.defaultRotation")[0]
 
+                # Rotate X
+                if (
+                    self.sender() == self.ui.rotateXDownButton
+                    or self.sender() == self.ui.rotateXUpButton
+                    or self.sender() == self.ui.rotateXLineEdit
+                ):
+                    # Check if the sender was the rotateXDownButton
+                    if self.sender() == self.ui.rotateXDownButton:
+                        rotater = -1 * rot_value
+                    # Check if the sender was the rotateXUpButton
+                    elif self.sender() == self.ui.rotateXUpButton:
+                        rotater = rot_value
+                    # Check if the sender was the rotateXLineEdit
+                    elif self.sender() == self.ui.rotateXLineEdit:
+                        try:
+                            rotater = float(self.ui.rotateXLineEdit.text()) - rot_mod[0]
+                        except:
+                            cmds.warning("Rotate X must be a numeric value!")
+                            return
+
+                    # Set the rotation
+                    cmds.setAttr(f"{curve_transform}.rotateX", rotater)
+                    cmds.setAttr(f"{curve_transform}.dRotateX", rotater + rot_mod[0])
+                    self.ui.rotateXLineEdit.setText(str(rotater + rot_mod[0]))
+
+                # Rotate Y
+                if (
+                    self.sender() == self.ui.rotateYDownButton
+                    or self.sender() == self.ui.rotateYUpButton
+                    or self.sender() == self.ui.rotateYLineEdit
+                ):
+                    # Check if the sender was the rotateYDownButton
+                    if self.sender() == self.ui.rotateYDownButton:
+                        rotater = -1 * rot_value
+                    # Check if the sender was the rotateYUpButton
+                    elif self.sender() == self.ui.rotateYUpButton:
+                        rotater = rot_value
+                    # Check if the sender was the rotateYLineEdit
+                    elif self.sender() == self.ui.rotateYLineEdit:
+                        try:
+                            rotater = float(self.ui.rotateYLineEdit.text()) - rot_mod[1]
+                        except:
+                            cmds.warning("Rotate Y must be a numeric value!")
+                            return
+                    # Set the rotation
+                    cmds.setAttr(f"{curve_transform}.rotateY", rotater)
+                    cmds.setAttr(f"{curve_transform}.dRotateY", rotater + rot_mod[1])
+                    self.ui.rotateYLineEdit.setText(str(rotater + rot_mod[1]))
+
+                # Rotate Z
+                if (
+                    self.sender() == self.ui.rotateZDownButton
+                    or self.sender() == self.ui.rotateZUpButton
+                    or self.sender() == self.ui.rotateZLineEdit
+                ):
+                    # Check if the sender was the rotateZDownButton
+                    if self.sender() == self.ui.rotateZDownButton:
+                        rotater = -1 * rot_value
+
+                    # Check if the sender was the rotateZUpButton
+                    elif self.sender() == self.ui.rotateZUpButton:
+                        rotater = rot_value
+
+                    # Check if the sender was the rotateZLineEdit
+                    elif self.sender() == self.ui.rotateZLineEdit:
+                        try:
+                            rotater = float(self.ui.rotateZLineEdit.text()) - rot_mod[2]
+                        except:
+                            cmds.warning("Rotate X must be a numeric value!")
+                            return
+                    # Set the rotation
+                    cmds.setAttr(f"{curve_transform}.rotateZ", rotater)
+                    cmds.setAttr(f"{curve_transform}.dRotateZ", rotater + rot_mod[2])
+                    self.ui.rotateZLineEdit.setText(str(rotater + rot_mod[2]))
+
+                # Freeze transformations
                 cmds.makeIdentity(curve_transform, apply=True)
 
     def on_searchButton_clicked(self):
         """
         Repopulates the table with the queried control name
         """
-
         # Passing in True to make the table searchable
         self.populate_table(True)
 
     def on_addButton_clicked(self):
+        """
+        When the addButton is clicked, create a new dialog to handle
+        saving the new curve to a json with the proper attributes.
+        """
         self.setEnabled(False)
         self.CreateDialog = CreateNewCurveDialog(self)
         self.CreateDialog.show()
 
-    def load_curve(self, file_name):
-        """
-        Opens the JSON file passed in and creates a curve based on its data
-        :param file_name: file path for the JSON being opened
-        :return: returns a reference to the curve created
-        """
-        curve_name = ""
-        cv_data = []
+    def show_context_menu(self, pos):
 
+        # If the user right-clicks on nothing, don't create the context menu
+        selection_model = self.ui.imageTable.selectionModel()
+        indexes = selection_model.selectedIndexes()
+        if not indexes[0].data(QtCore.Qt.DisplayRole):
+            return
+
+        # Create the context menu
+        menu = QtWidgets.QMenu()
+
+        rename_action = QAction("Rename Selected", self)
+        delete_action = QAction("Delete Selected", self)
+        menu.addAction(rename_action)
+        menu.addAction(delete_action)
+
+        rename_action.triggered.connect(self.on_rename_action_triggered)
+        delete_action.triggered.connect(self.on_delete_action_triggered)
+
+        # Display the context menu
+        pos_offset = pos + QtCore.QPoint(226, 15)
+        menu.exec_(self.mapToGlobal(pos_offset))
+
+    def on_rename_action_triggered(self):
+        # Get the selection from the table
         try:
-            with open(
-                self.CONTROLLER_DATA_DIR + "\\" + file_name + ".json", "r"
-            ) as curve_file:
-                data = json.load(curve_file)
-                curve_name = data["name"]
-                cv_data = data["CVs"]
-                degree = data["degree"]
+            selection_model = self.ui.imageTable.selectionModel()
+            selected_indexes = selection_model.selectedIndexes()
 
-            my_curve = cmds.curve(p=cv_data, d=degree, name=curve_name)
+            curve_name = selected_indexes[0].data(QtCore.Qt.DisplayRole)
         except:
-            cmds.error(
-                f"Could not load data from {self.CONTROLLER_DATA_DIR}\\{file_name}.json"
-            )
+            cmds.warning("Please select a curve from the table to rename.")
 
-        return my_curve
+        # Query the user for the new name and rename the curve data using
+        self.setEnabled(False)
+        self.RenameDialog = RenameDialog(self, curve_name)
+        self.RenameDialog.show()
+
+    def on_delete_action_triggered(self):
+        # Get the selection from the table
+        try:
+            selection_model = self.ui.imageTable.selectionModel()
+            selected_indexes = selection_model.selectedIndexes()
+
+            curve_name = selected_indexes[0].data(QtCore.Qt.DisplayRole)
+        except:
+            cmds.warning("Please select a curve from the table to delete.")
+
+        # Validate user choice
+        json_path = Const.CTRL_DATA_DIR + curve_name + ".json"
+        png_path = Const.CTRL_DATA_DIR + curve_name + ".png"
+
+        if os.path.exists(json_path):
+            qm = QtWidgets.QMessageBox
+            message = f"Are you sure you want\nto delete {curve_name}?"
+            user_input = qm.question(
+                self,
+                f"Delete {curve_name}",
+                message,
+                qm.Yes | qm.No,
+            )
+            if user_input == qm.No:
+                return
+            else:
+                # Delete the curve data
+                os.remove(json_path)
+                try:
+                    os.remove(png_path)
+                except:
+                    cmds.warning("No associated png to delete.")
+
+        # Reload the table
+        self.populate_table()
 
 
 if __name__ == "__main__":
