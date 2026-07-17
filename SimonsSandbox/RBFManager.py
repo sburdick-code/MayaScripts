@@ -1,4 +1,4 @@
-from PySide2 import QtWidgets, QtCore, QtUiTools
+from PySide2 import QtWidgets, QtCore, QtUiTools, QtGui
 from shiboken2 import wrapInstance
 
 import maya.OpenMaya as om
@@ -41,6 +41,10 @@ class RBFManager(QtWidgets.QDialog):
         f.close()
 
     def createConnections(self):
+
+        self.createCustomContextMenu()
+        self.setupTables()
+
         self.ui.Driver_LineEdit.textChanged.connect(self.LoadDriver)
         self.ui.AddDriver_Button.clicked.connect(
             lambda: self.UpdateTextToSelection(self.ui.Driver_LineEdit)
@@ -55,6 +59,86 @@ class RBFManager(QtWidgets.QDialog):
         self.ui.Browse_Button.clicked.connect(self.showFileSelectDialog)
 
         self.ui.ToggleUpdates_Button.clicked.connect(self.ToggleUpdatesButton)
+
+    def setupTables(self):
+
+        # Driver Table
+        self.Driver_Table_Model = QtGui.QStandardItemModel(0, 3)  # 1 rows, 4 columns
+        self.Driver_Table_Model.setHorizontalHeaderLabels(["Input", "X", "Y", "Z"])
+        self.ui.Driver_Table.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectRows
+        )
+        self.ui.Driver_Table.setSelectionMode(
+            QtWidgets.QAbstractItemView.SingleSelection
+        )
+
+        self.ui.Driver_Table.setContextMenuPolicy(
+            QtCore.Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.ui.Driver_Table.customContextMenuRequested.connect(
+            self.displayDriverContextMenu
+        )
+
+        self.ui.Driver_Table.setModel(self.Driver_Table_Model)
+
+        # Driven Table
+        self.Driven_Table_Model = QtGui.QStandardItemModel(0, 3)  # 1 rows, 4 columns
+        self.Driven_Table_Model.setHorizontalHeaderLabels(["Input", "X", "Y", "Z"])
+        self.ui.Driven_Table.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectRows
+        )
+        self.ui.Driven_Table.setSelectionMode(
+            QtWidgets.QAbstractItemView.SingleSelection
+        )
+
+        self.ui.Driven_Table.setContextMenuPolicy(
+            QtCore.Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.ui.Driven_Table.customContextMenuRequested.connect(
+            self.displayDrivenContextMenu
+        )
+
+        self.ui.Driven_Table.setModel(self.Driven_Table_Model)
+
+        # Debug Setup some default values
+        items = ["rotation", "0.0", "0.0", "0.0"]
+        self.addToTable(self.Driver_Table_Model, items)
+
+        # Debug Setup some default values
+        items = ["translation", "1", "0.2", "3.0"]
+        self.addToTable(self.Driven_Table_Model, items)
+
+    def addToTable(self, model, items):
+
+        formatted = []
+
+        for item in items:
+            formatted.append(QtGui.QStandardItem(item))
+
+        model.appendRow(formatted)
+
+    def createCustomContextMenu(self):
+
+        self.context_menu = QtWidgets.QMenu(self)
+        action1 = self.context_menu.addAction("Action 1")
+        action2 = self.context_menu.addAction("Action 2")
+        action3 = self.context_menu.addAction("Action 3")
+
+    def displayDriverContextMenu(self, position):
+        item = self.ui.Driver_Table.indexAt(position)
+
+        if item:
+            print(item.row(), item.data())
+
+        self.context_menu.exec_(self.ui.Driver_Table.mapToGlobal(position))
+
+    def displayDrivenContextMenu(self, position):
+        item = self.ui.Driven_Table.indexAt(position)
+
+        if item:
+            print(item.row(), item.data())
+
+        self.context_menu.exec_(self.ui.Driven_Table.mapToGlobal(position))
 
     def doSomething(self):
         print("### TODO ###")
