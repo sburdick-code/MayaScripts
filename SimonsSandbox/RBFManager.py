@@ -5,6 +5,8 @@ import maya.OpenMaya as om
 import maya.OpenMayaUI as omui
 import maya.cmds as cmds
 
+import os
+
 
 def mayaMainWindow():
     mainWindowPtr = omui.MQtUtil.mainWindow()
@@ -22,7 +24,8 @@ class RBFManager(QtWidgets.QDialog):
         super().__init__(parent)
 
         self.setWindowTitle("RBF Manager Tool")
-        self.setMinimumSize(550, 480)
+        self.setMinimumSize(400, 480)
+        self.resize(400, 480)
         self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
 
         self.initUI()
@@ -45,6 +48,9 @@ class RBFManager(QtWidgets.QDialog):
         self.createCustomContextMenu()
         self.setupTables()
 
+        print(self.getDataFromTable(self.Driver_Table_Model, 0, 1))
+        print(self.verifyValidInputs())
+
         self.ui.Driver_LineEdit.textChanged.connect(self.LoadDriver)
         self.ui.AddDriver_Button.clicked.connect(
             lambda: self.UpdateTextToSelection(self.ui.Driver_LineEdit)
@@ -60,11 +66,48 @@ class RBFManager(QtWidgets.QDialog):
 
         self.ui.ToggleUpdates_Button.clicked.connect(self.ToggleUpdatesButton)
 
+        self.ui.Save_Button.clicked.connect(self.onSave)
+
+    def verifyValidInputs(self):
+
+        allInputsValid = True
+
+        driverName = self.ui.Driver_LineEdit.text()
+        drivenName = self.ui.Driven_LineEdit.text()
+
+        # Check if there is a valid driver obj
+        if not cmds.objExists(driverName):
+            allInputsValid = False
+
+        # Check if there is a valid driven obj
+        if not cmds.objExists(drivenName):
+            allInputsValid = False
+
+        # Check if the first value in each row of each table is valid
+        for i in range(self.Driver_Table_Model.rowCount()):
+            if self.getDataFromTable(self.Driver_Table_Model, i, 0)[0] == "None":
+                allInputsValid = False
+
+        for i in range(self.Driven_Table_Model.rowCount()):
+            if self.getDataFromTable(self.Driven_Table_Model, i, 0)[0] == "None":
+                allInputsValid = False
+
+        # Check if there is a unique ID
+        if len(self.ui.ID_LineEdit.text()) <= 0:
+            allInputsValid = False
+
+        # Check if the file is being saved to a valid directory
+        file_path = self.ui.FilePath_LineEdit.text()
+        if not os.path.exists(os.path.dirname(file_path)):
+            allInputsValid = False
+
+        return allInputsValid
+
     def setupTables(self):
 
         # Driver Table
         self.Driver_Table_Model = QtGui.QStandardItemModel(0, 3)  # 1 rows, 4 columns
-        self.Driver_Table_Model.setHorizontalHeaderLabels(["Input", "X", "Y", "Z"])
+        self.Driver_Table_Model.setHorizontalHeaderLabels(["X", "Y", "Z"])
         self.ui.Driver_Table.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectRows
         )
@@ -78,12 +121,16 @@ class RBFManager(QtWidgets.QDialog):
         self.ui.Driver_Table.customContextMenuRequested.connect(
             self.displayDriverContextMenu
         )
+        self.Driver_Table_Model.itemChanged.connect(self.onItemChanged)
 
         self.ui.Driver_Table.setModel(self.Driver_Table_Model)
 
+        for i in range(3):
+            self.ui.Driver_Table.setColumnWidth(i, 50)
+
         # Driven Table
         self.Driven_Table_Model = QtGui.QStandardItemModel(0, 3)  # 1 rows, 4 columns
-        self.Driven_Table_Model.setHorizontalHeaderLabels(["Input", "X", "Y", "Z"])
+        self.Driven_Table_Model.setHorizontalHeaderLabels(["X", "Y", "Z"])
         self.ui.Driven_Table.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectRows
         )
@@ -97,15 +144,19 @@ class RBFManager(QtWidgets.QDialog):
         self.ui.Driven_Table.customContextMenuRequested.connect(
             self.displayDrivenContextMenu
         )
+        self.Driven_Table_Model.itemChanged.connect(self.onItemChanged)
 
         self.ui.Driven_Table.setModel(self.Driven_Table_Model)
 
+        for i in range(3):
+            self.ui.Driven_Table.setColumnWidth(i, 50)
+
         # Debug Setup some default values
-        items = ["rotation", "0.0", "0.0", "0.0"]
+        items = ["0.0", "0.0", "0.0"]
         self.addToTable(self.Driver_Table_Model, items)
 
         # Debug Setup some default values
-        items = ["translation", "1", "0.2", "3.0"]
+        items = ["1", "0.2", "3.0"]
         self.addToTable(self.Driven_Table_Model, items)
 
     def addToTable(self, model, items):
@@ -116,6 +167,18 @@ class RBFManager(QtWidgets.QDialog):
             formatted.append(QtGui.QStandardItem(item))
 
         model.appendRow(formatted)
+
+    def getDataFromTable(self, model, row, col=-1):
+
+        dataOut = []
+
+        if col == -1:
+            for i in range(model.columnCount()):
+                dataOut.append(model.item(row, i).text())
+        else:
+            dataOut.append(model.item(row, col).text())
+
+        return dataOut
 
     def createCustomContextMenu(self):
 
@@ -149,16 +212,111 @@ class RBFManager(QtWidgets.QDialog):
         print(selected)
         LineEdit.setText(str(selected))
 
+    def updateRBFNode(self):
+        self.createRBFNode()
+
+    def createRBFNode(self):
+        if self.verifyValidInputs():
+
+            # Check if a node already exists
+            ID = self.ui.ID_LineEdit.text()
+            nodeName = f"{ID}_RBF"
+            if cmds.objExists(nodeName):
+                node = cmds.ls(nodeName)
+            else:
+                node = cmds.createNode("SoxsRBFNode", name=nodeName, skipSelect=True)
+
+            # Get Driver and Driven data
+            driverText = self.ui.Driver_LineEdit.text()
+            drivenText = self.ui.Driven_LineEdit.text()
+            driverChannel = self.ui.Driver_ComboBox.currentText().lower()
+            drivenChannel = self.ui.Driven_ComboBox.currentText().lower()
+
+            # Clear all attributes on RBF Node
+            nodeAttrs = [
+                f"{nodeName}.InputX",
+                f"{nodeName}.InputY",
+                f"{nodeName}.InputZ",
+                f"{nodeName}.OutputX",
+                f"{nodeName}.OutputY",
+                f"{nodeName}.OutputZ",
+            ]
+            for attribute in nodeAttrs:
+                destinationAttrs = (
+                    cmds.listConnections(attribute, plugs=True, source=False) or []
+                )
+                sourceAttrs = (
+                    cmds.listConnections(attribute, plugs=True, destination=False) or []
+                )
+
+                for destAttr in destinationAttrs:
+                    cmds.disconnectAttr(attribute, destAttr)
+                for srcAttr in sourceAttrs:
+                    cmds.disconnectAttr(srcAttr, attribute)
+
+            # Clear all attributes on Driven
+            drivenAttrs = [
+                f"{drivenText}.translateX",
+                f"{drivenText}.translateY",
+                f"{drivenText}.translateZ",
+                f"{drivenText}.rotateX",
+                f"{drivenText}.rotateY",
+                f"{drivenText}.rotateZ",
+                f"{drivenText}.scaleX",
+                f"{drivenText}.scaleY",
+                f"{drivenText}.scaleZ",
+            ]
+
+            for drivenAttr in drivenAttrs:
+                for nodeAttr in nodeAttrs:
+                    try:
+                        cmds.disconnectAttr(nodeAttr, drivenAttr)
+                    except:
+                        pass
+
+            setup = self.ui.Setup_ComboBox.currentText()
+
+            print(setup)
+
+            cmds.connectAttr(f"{driverText}.{driverChannel}X", f"{nodeName}.InputX")
+            cmds.connectAttr(f"{nodeName}.OutputX", f"{drivenText}.{drivenChannel}X")
+
+            # If driver setup is 2in
+            if setup[0:3] == "2in":
+                cmds.connectAttr(f"{driverText}.{driverChannel}Y", f"{nodeName}.InputY")
+            # If driver setup is 3in
+            elif setup[0:3] == "3in":
+                cmds.connectAttr(f"{driverText}.{driverChannel}Y", f"{nodeName}.InputY")
+                cmds.connectAttr(f"{driverText}.{driverChannel}Z", f"{nodeName}.InputZ")
+
+            # If driven setup is 2out
+            if setup[-4:] == "2out":
+                cmds.connectAttr(
+                    f"{nodeName}.OutputY", f"{drivenText}.{drivenChannel}Y"
+                )
+            # If driven setup is 3out
+            elif setup[-4:] == "3out":
+                cmds.connectAttr(
+                    f"{nodeName}.OutputY", f"{drivenText}.{drivenChannel}Y"
+                )
+                cmds.connectAttr(
+                    f"{nodeName}.OutputZ", f"{drivenText}.{drivenChannel}Z"
+                )
+
     def LoadDriver(self):
         print("Load Driver")
+
+        self.GenerateID()
 
     def LoadDriven(self):
         print("Load Driver")
 
+        self.GenerateID()
+
     def GenerateID(self):
         Driver_Text = self.ui.Driver_LineEdit.text()
         Driven_Text = self.ui.Driven_LineEdit.text()
-        self.ui.ID_LineEdit.setText(f"{Driver_Text}->{Driven_Text}")
+        self.ui.ID_LineEdit.setText(f"{Driver_Text}_to_{Driven_Text}")
 
     def ToggleUpdatesButton(self):
         button_name = self.ui.ToggleUpdates_Button.text()
@@ -176,6 +334,16 @@ class RBFManager(QtWidgets.QDialog):
         )
         if file_path:
             self.ui.FilePath_LineEdit.setText(file_path)
+
+    def onItemChanged(self, item):
+
+        row = item.row()
+        col = item.column()
+        value = item.text()
+        print(row, col, value)
+
+    def onSave(self):
+        self.updateRBFNode()
 
 
 if __name__ == "__main__":
