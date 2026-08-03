@@ -227,19 +227,29 @@ class RBFManager(QtWidgets.QDialog):
                 node = cmds.createNode("SoxsRBFNode", name=nodeName, skipSelect=True)
 
             # Get Driver and Driven data
-            driverText = self.ui.Driver_LineEdit.text()
-            drivenText = self.ui.Driven_LineEdit.text()
-            driverChannel = self.ui.Driver_ComboBox.currentText().lower()
-            drivenChannel = self.ui.Driven_ComboBox.currentText().lower()
+            driver_text = self.ui.Driver_LineEdit.text()
+            driven_text = self.ui.Driven_LineEdit.text()
+            driver_channel = self.ui.Driver_ComboBox.currentText().lower()
+            driven_channel = self.ui.Driven_ComboBox.currentText().lower()
+            setup = self.ui.Setup_ComboBox.currentText()
+            setup_index = self.ui.Setup_ComboBox.currentIndex()
+            json_path = self.ui.FilePath_LineEdit.text()
+            kernel_index = self.ui.Kernel_ComboBox.currentIndex() + 1
 
             # Clear all attributes on RBF Node
             nodeAttrs = [
                 f"{nodeName}.InputX",
                 f"{nodeName}.InputY",
                 f"{nodeName}.InputZ",
-                f"{nodeName}.OutputX",
-                f"{nodeName}.OutputY",
-                f"{nodeName}.OutputZ",
+                f"{nodeName}.OutputTranslateX",
+                f"{nodeName}.OutputTranslateY",
+                f"{nodeName}.OutputTranslateZ",
+                f"{nodeName}.OutputRotateX",
+                f"{nodeName}.OutputRotateY",
+                f"{nodeName}.OutputRotateZ",
+                f"{nodeName}.OutputScaleX",
+                f"{nodeName}.OutputScaleY",
+                f"{nodeName}.OutputScaleZ",
             ]
             for attribute in nodeAttrs:
                 destinationAttrs = (
@@ -254,53 +264,53 @@ class RBFManager(QtWidgets.QDialog):
                 for srcAttr in sourceAttrs:
                     cmds.disconnectAttr(srcAttr, attribute)
 
-            # Clear all attributes on Driven
-            drivenAttrs = [
-                f"{drivenText}.translateX",
-                f"{drivenText}.translateY",
-                f"{drivenText}.translateZ",
-                f"{drivenText}.rotateX",
-                f"{drivenText}.rotateY",
-                f"{drivenText}.rotateZ",
-                f"{drivenText}.scaleX",
-                f"{drivenText}.scaleY",
-                f"{drivenText}.scaleZ",
-            ]
+            # Set the Data Path and Data Id on the node
+            cmds.setAttr(f"{nodeName}.RBF_DataPath", json_path, type="string")
+            cmds.setAttr(f"{nodeName}.RBF_DataId", ID, type="string")
+            cmds.setAttr(f"{nodeName}.RBF_Settings", setup_index)
+            cmds.setAttr(f"{nodeName}.RBF_Kernel", kernel_index)
 
-            for drivenAttr in drivenAttrs:
-                for nodeAttr in nodeAttrs:
-                    try:
-                        cmds.disconnectAttr(nodeAttr, drivenAttr)
-                    except:
-                        pass
+            # Set up connections between Driver, Node, and Driven
+            # TODO: read the XYZ columns and determine the proper connections
 
-            setup = self.ui.Setup_ComboBox.currentText()
-
-            print(setup)
-
-            cmds.connectAttr(f"{driverText}.{driverChannel}X", f"{nodeName}.InputX")
-            cmds.connectAttr(f"{nodeName}.OutputX", f"{drivenText}.{drivenChannel}X")
+            # Setup X input
+            cmds.connectAttr(f"{driver_text}.{driver_channel}X", f"{nodeName}.InputX")
 
             # If driver setup is 2in
             if setup[0:3] == "2in":
-                cmds.connectAttr(f"{driverText}.{driverChannel}Y", f"{nodeName}.InputY")
+                cmds.connectAttr(
+                    f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY"
+                )
             # If driver setup is 3in
             elif setup[0:3] == "3in":
-                cmds.connectAttr(f"{driverText}.{driverChannel}Y", f"{nodeName}.InputY")
-                cmds.connectAttr(f"{driverText}.{driverChannel}Z", f"{nodeName}.InputZ")
+                cmds.connectAttr(
+                    f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY"
+                )
+                cmds.connectAttr(
+                    f"{driver_text}.{driver_channel}Z", f"{nodeName}.InputZ"
+                )
+
+            # Setup X output
+            cmds.connectAttr(
+                f"{nodeName}.Output{driven_channel.title()}X",
+                f"{driven_text}.{driven_channel}X",
+            )
 
             # If driven setup is 2out
             if setup[-4:] == "2out":
                 cmds.connectAttr(
-                    f"{nodeName}.OutputY", f"{drivenText}.{drivenChannel}Y"
+                    f"{nodeName}.Output{driven_channel.title()}Y",
+                    f"{driven_text}.{driven_channel}Y",
                 )
             # If driven setup is 3out
             elif setup[-4:] == "3out":
                 cmds.connectAttr(
-                    f"{nodeName}.OutputY", f"{drivenText}.{drivenChannel}Y"
+                    f"{nodeName}.Output{driven_channel.title()}Y",
+                    f"{driven_text}.{driven_channel}Y",
                 )
                 cmds.connectAttr(
-                    f"{nodeName}.OutputZ", f"{drivenText}.{drivenChannel}Z"
+                    f"{nodeName}.Output{driven_channel.title()}Z",
+                    f"{driven_text}.{driven_channel}Z",
                 )
 
     def LoadDriver(self):
