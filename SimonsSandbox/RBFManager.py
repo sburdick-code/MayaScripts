@@ -6,6 +6,7 @@ import maya.OpenMayaUI as omui
 import maya.cmds as cmds
 
 import os
+import numpy as np
 
 
 def mayaMainWindow():
@@ -19,6 +20,8 @@ class RBFManager(QtWidgets.QDialog):
 
     FILE_FILTERS = "JSON (*.json)"
     selected_filter = "JSON (*.json)"
+
+    curRow = -1
 
     def __init__(self, parent=mayaMainWindow()):
         super().__init__(parent)
@@ -168,6 +171,9 @@ class RBFManager(QtWidgets.QDialog):
 
         model.appendRow(formatted)
 
+    def removeFromTable(self, model, row):
+        model.removeRow(row)
+
     def getDataFromTable(self, model, row, col=-1):
 
         dataOut = []
@@ -180,28 +186,63 @@ class RBFManager(QtWidgets.QDialog):
 
         return dataOut
 
+    def getAllDataFromTable(self, model):
+
+        dataOut = []
+
+        for i in range(model.rowCount()):
+            dataOut.append(self.getDataFromTable(model, i))
+
+        return dataOut
+
     def createCustomContextMenu(self):
 
-        self.context_menu = QtWidgets.QMenu(self)
-        action1 = self.context_menu.addAction("Action 1")
-        action2 = self.context_menu.addAction("Action 2")
-        action3 = self.context_menu.addAction("Action 3")
+        self.edit_context_menu = QtWidgets.QMenu(self)
+        action_GoTo = self.edit_context_menu.addAction("Go To Position")
+        action_Delete = self.edit_context_menu.addAction("Delete Row")
+
+        action_GoTo.triggered.connect(self.onGoToPosition)
+        action_Delete.triggered.connect(self.onDeleteRow)
+
+        self.add_context_menu = QtWidgets.QMenu(self)
+        action_Add = self.add_context_menu.addAction("Add New")
+
+        action_Add.triggered.connect(self.onAddNew)
 
     def displayDriverContextMenu(self, position):
+
         item = self.ui.Driver_Table.indexAt(position)
+        cPosition = position + QtCore.QPoint(20, 25)
 
         if item:
             print(item.row(), item.data())
 
-        self.context_menu.exec_(self.ui.Driver_Table.mapToGlobal(position))
+            if item.row() == -1:  # Nothing is selected
+                self.add_context_menu.exec_(self.ui.Driver_Table.mapToGlobal(cPosition))
+
+            else:
+                self.curRow = item.row()
+
+                self.edit_context_menu.exec_(
+                    self.ui.Driver_Table.mapToGlobal(cPosition)
+                )
 
     def displayDrivenContextMenu(self, position):
         item = self.ui.Driven_Table.indexAt(position)
+        cPosition = position + QtCore.QPoint(20, 25)
 
         if item:
             print(item.row(), item.data())
 
-        self.context_menu.exec_(self.ui.Driven_Table.mapToGlobal(position))
+            if item.row() == -1:  # Nothing is selected
+                self.add_context_menu.exec_(self.ui.Driven_Table.mapToGlobal(cPosition))
+
+            else:
+                self.curRow = item.row()
+
+                self.edit_context_menu.exec_(
+                    self.ui.Driven_Table.mapToGlobal(cPosition)
+                )
 
     def doSomething(self):
         print("### TODO ###")
@@ -235,6 +276,13 @@ class RBFManager(QtWidgets.QDialog):
             setup_index = self.ui.Setup_ComboBox.currentIndex()
             json_path = self.ui.FilePath_LineEdit.text()
             kernel_index = self.ui.Kernel_ComboBox.currentIndex() + 1
+
+            # Write to the Json
+            driverData = self.getAllDataFromTable(self.Driver_Table_Model)
+            drivenData = self.getAllDataFromTable(self.Driven_Table_Model)
+            # weights =
+
+            # TODO convert RBF Hleper Script into the weight calculator, then write it to the json!
 
             # Clear all attributes on RBF Node
             nodeAttrs = [
@@ -319,7 +367,7 @@ class RBFManager(QtWidgets.QDialog):
         self.GenerateID()
 
     def LoadDriven(self):
-        print("Load Driver")
+        print("Load Driven")
 
         self.GenerateID()
 
@@ -354,6 +402,88 @@ class RBFManager(QtWidgets.QDialog):
 
     def onSave(self):
         self.updateRBFNode()
+
+    def onAddNew(self):
+
+        DriverName = self.ui.Driver_LineEdit.text()
+        DrivenName = self.ui.Driven_LineEdit.text()
+        DriverAttr = self.ui.Driver_ComboBox.currentText().lower()
+        DrivenAttr = self.ui.Driven_ComboBox.currentText().lower()
+
+        if cmds.objExists(DriverName) and cmds.objExists(DrivenName):
+            try:
+                DriverPos = cmds.getAttr(f"{DriverName}.{DriverAttr}")[0]
+                DrivenPos = cmds.getAttr(f"{DrivenName}.{DrivenAttr}")[0]
+                DriverPos = [f"{item:.3f}" for item in DriverPos]
+                DrivenPos = [f"{item:.3f}" for item in DrivenPos]
+
+                self.addToTable(self.Driver_Table_Model, DriverPos)
+                self.addToTable(self.Driven_Table_Model, DrivenPos)
+
+            except:
+                cmds.warning(
+                    "Please select a valid Driver and Driven before adding positions!"
+                )
+        else:
+            cmds.warning(
+                "Please select a valid Driver and Driven before adding positions!"
+            )
+
+    def onDeleteRow(self):
+        if self.curRow >= 0:
+            self.removeFromTable(self.Driver_Table_Model, self.curRow)
+            self.removeFromTable(self.Driven_Table_Model, self.curRow)
+
+    def getXYZ(self, index):
+        out = "X"
+        if index == 1:
+            out = "Y"
+        elif index == 2:
+            out = "Z"
+        return out
+
+    def isNumber(self, text):
+        try:
+            float(text)
+            return True
+        except ValueError:
+            return False
+
+    def onGoToPosition(self):
+        setup = self.ui.Setup_ComboBox.currentText()
+        DriverName = self.ui.Driver_LineEdit.text()
+        DrivenName = self.ui.Driven_LineEdit.text()
+        DriverAttr = self.ui.Driver_ComboBox.currentText().lower()
+        DrivenAttr = self.ui.Driven_ComboBox.currentText().lower()
+
+        DriverPos = self.getDataFromTable(self.Driver_Table_Model, self.curRow)
+        DrivenPos = self.getDataFromTable(self.Driven_Table_Model, self.curRow)
+
+        if cmds.objExists(DriverName) and cmds.objExists(DrivenName):
+            try:
+                for i in range(3):
+                    if self.isNumber(DriverPos[i]):
+                        coord = self.getXYZ(i)
+                        attr = f"{DriverName}.{DriverAttr}{coord}"
+                        pos = float(DriverPos[i])
+                        cmds.setAttr(attr, pos)
+            except:
+                cmds.warning("Error setting Driver Position")
+
+            try:
+                for i in range(3):
+                    if self.isNumber(DrivenPos[i]):
+                        coord = self.getXYZ(i)
+                        attr = f"{DrivenName}.{DrivenAttr}{coord}"
+                        pos = float(DrivenPos[i])
+                        cmds.setAttr(attr, pos)
+            except:
+                pass
+
+        else:
+            cmds.warning(
+                "Please select a valid Driver and Driven before adding positions!"
+            )
 
 
 if __name__ == "__main__":
