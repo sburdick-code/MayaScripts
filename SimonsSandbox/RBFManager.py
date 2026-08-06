@@ -7,6 +7,8 @@ import maya.cmds as cmds
 
 import os
 import numpy as np
+import math
+import json
 
 
 def mayaMainWindow():
@@ -180,9 +182,10 @@ class RBFManager(QtWidgets.QDialog):
 
         if col == -1:
             for i in range(model.columnCount()):
-                dataOut.append(model.item(row, i).text())
+                if self.isNumber(model.item(row, i).text()):
+                    dataOut.append(float(model.item(row, i).text()))
         else:
-            dataOut.append(model.item(row, col).text())
+            dataOut.append(float(model.item(row, col).text()))
 
         return dataOut
 
@@ -261,6 +264,7 @@ class RBFManager(QtWidgets.QDialog):
 
             # Check if a node already exists
             ID = self.ui.ID_LineEdit.text()
+
             nodeName = f"{ID}_RBF"
             if cmds.objExists(nodeName):
                 node = cmds.ls(nodeName)
@@ -280,9 +284,44 @@ class RBFManager(QtWidgets.QDialog):
             # Write to the Json
             driverData = self.getAllDataFromTable(self.Driver_Table_Model)
             drivenData = self.getAllDataFromTable(self.Driven_Table_Model)
-            # weights =
+            driverMtrx = np.array(driverData)
+            drivenMtrx = np.array(drivenData)
+            weights = RBFCalc.calculate_weights_matrix(
+                driverMtrx, drivenMtrx, kernel_index
+            )
 
-            # TODO convert RBF Hleper Script into the weight calculator, then write it to the json!
+            dKey = f"d_{ID}"
+            oKey = f"o_{ID}"
+            wKey = f"w_{ID}"
+
+            writeData = {
+                dKey: driverData,
+                oKey: drivenData,
+                wKey: weights.tolist(),
+            }
+
+            if not os.path.isfile(json_path):
+                try:
+                    with open(json_path, "w") as f:
+                        pass
+                except:
+                    cmds.error(f"Could not write json to : {json_path}")
+                    return
+
+            with open(json_path, "r+") as f:
+
+                try:
+                    fileData = json.load(f)
+                    fileData[dKey] = driverData
+                    fileData[oKey] = drivenData
+                    fileData[wKey] = weights.tolist()
+                    f.seek(0)
+
+                except:
+                    fileData = writeData
+
+                json.dump(fileData, f)
+                f.truncate()
 
             # Clear all attributes on RBF Node
             nodeAttrs = [
@@ -387,7 +426,7 @@ class RBFManager(QtWidgets.QDialog):
         self.ui.ToggleUpdates_Button.setText(new_name)
 
     def showFileSelectDialog(self):
-        file_path, self.selected_filter = QtWidgets.QFileDialog.getOpenFileName(
+        file_path, self.selected_filter = QtWidgets.QFileDialog.getSaveFileName(
             self, "Select File", "", self.FILE_FILTERS, self.selected_filter
         )
         if file_path:
@@ -484,6 +523,82 @@ class RBFManager(QtWidgets.QDialog):
             cmds.warning(
                 "Please select a valid Driver and Driven before adding positions!"
             )
+
+
+class RBFCalc:
+    # Calculate the Weight matrix
+    @staticmethod
+    def calculate_weights_matrix(input_mtrx, output_mtrx, beta):
+        dist_mtrx = RBFCalc.calc_distance_matrix(input_mtrx)
+        phi = RBFCalc.rbf(dist_mtrx, beta)
+        weight_mtrx = np.linalg.solve(phi, output_mtrx)
+
+        return weight_mtrx
+
+    # Distance
+    @staticmethod
+    def distance(p1, p2):
+        return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
+
+    # RBF Solver
+    @staticmethod
+    def rbf(r, beta):
+        return r**beta
+
+    # Training
+    @staticmethod
+    def calc_distance_matrix(p_matrix):
+        dist_matrix = np.zeros([len(p_matrix), len(p_matrix)])
+
+        for x in range(len(p_matrix)):
+            for y in range(len(p_matrix)):
+                dist_matrix[x][y] = RBFCalc.distance(p_matrix[x], p_matrix[y])
+
+        return dist_matrix
+
+    # Evaluation
+    @staticmethod
+    def evaluate_rbf(q, pos_mtrx, weight_mtrx):
+        q_phi = np.zeros(len(pos_mtrx))
+
+        for i in range(len(q_phi)):
+            dist = RBFCalc.distance(q, pos_mtrx[i])
+            q_phi[i] = RBFCalc.rbf(dist)
+
+        result = np.dot(q_phi, weight_mtrx)
+        return result
+
+    @staticmethod
+    def format_RBF_string(input_mtrx, output_mtrx, weight_mtrx, unique_id):
+        # format strings
+        p_array_string = np.array2string(input_mtrx, separator=",")
+        p_formatted_string = (
+            p_array_string.replace("\n", "")
+            .replace(" ", "")
+            .replace("0.", "0.0")
+            .replace("1.", "1.0")
+        )
+        o_array_string = np.array2string(output_mtrx, separator=",")
+        o_formatted_string = (
+            o_array_string.replace("\n", "")
+            .replace(" ", "")
+            .replace("0.", "0.0")
+            .replace("1.", "1.0")
+        )
+        w_array_string = np.array2string(weight_mtrx, separator=",")
+        w_formatted_string = (
+            w_array_string.replace("\n", "").replace(" ", "").replace("0.", "0.0")
+        )
+
+        out = f'"d_{unique_id}":{p_formatted_string},"o_{unique_id}":{o_formatted_string},"w_{unique_id}":{w_formatted_string}'
+
+        out_dict = {
+            f"d_{unique_id}": input_mtrx.tolist(),
+            f"o_{unique_id}": output_mtrx.tolist(),
+            f"w_{unique_id}": weight_mtrx.tolist(),
+        }
+
+        return out_dict
 
 
 if __name__ == "__main__":
