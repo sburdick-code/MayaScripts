@@ -98,7 +98,7 @@ class SoxsRBFNode(om.MPxNode):
             with open(in_matrix_path, "r") as f:
                 rbf_data = json.load(f)
 
-                dist_key = f"i_{rbf_id}"
+                dist_key = f"d_{rbf_id}"
                 weight_key = f"w_{rbf_id}"
 
                 if dist_key not in rbf_data:
@@ -192,8 +192,8 @@ class SoxsRBFNode(om.MPxNode):
         result = np.dot(in_phi, weight_matrix)
 
         # HACKY PATCH! Idk why this works :(
-        # if beta < 3:
-        # result *= 10
+        if beta < 3:
+            result *= 10
 
         return result
 

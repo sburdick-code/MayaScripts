@@ -1,11 +1,5 @@
-try:
-    # Qt5
-    from PySide2 import QtWidgets, QtCore, QtUiTools, QtGui
-    from shiboken2 import wrapInstance
-except:
-    # Qt6
-    from PySide6 import QtWidgets, QtCore, QtUiTools, QtGui
-    from shiboken6 import wrapInstance
+from PySide2 import QtWidgets, QtCore, QtUiTools, QtGui
+from shiboken2 import wrapInstance
 
 import maya.OpenMaya as om
 import maya.OpenMayaUI as omui
@@ -24,7 +18,7 @@ def mayaMainWindow():
 
 class RBFManager(QtWidgets.QDialog):
 
-    UI_FILE = r"Z:\Projects\MayaScripts\SimonsSandbox\RBFManagerWidget.ui"
+    UI_FILE = "Z:\Projects\MayaScripts\SimonsSandbox\RBFManagerWidget.ui"
 
     FILE_FILTERS = "JSON (*.json)"
     selected_filter = "JSON (*.json)"
@@ -71,16 +65,11 @@ class RBFManager(QtWidgets.QDialog):
             lambda: self.UpdateTextToSelection(self.ui.Driven_LineEdit)
         )
 
-        self.ui.ClearDriver_Button.clicked.connect(self.onClearDriver)
-        self.ui.ClearDriven_Button.clicked.connect(self.onClearDriven)
-
         self.ui.GenerateID_Button.clicked.connect(self.GenerateID)
 
         self.ui.Browse_Button.clicked.connect(self.showFileSelectDialog)
 
-        self.ui.ToggleUpdates_Button.clicked.connect(self.onToggleUpdates)
-
-        self.ui.Delete_Button.clicked.connect(self.onDeleteRBFConnection)
+        self.ui.ToggleUpdates_Button.clicked.connect(self.ToggleUpdatesButton)
 
         self.ui.Save_Button.clicked.connect(self.onSave)
 
@@ -180,16 +169,12 @@ class RBFManager(QtWidgets.QDialog):
         formatted = []
 
         for item in items:
-            formatted.append(QtGui.QStandardItem(str(item)))
+            formatted.append(QtGui.QStandardItem(item))
 
         model.appendRow(formatted)
 
     def removeFromTable(self, model, row):
         model.removeRow(row)
-
-    def clearTable(self, model):
-        for row in range(model.rowCount()):
-            model.removeRow(0)
 
     def getDataFromTable(self, model, row, col=-1):
 
@@ -279,14 +264,22 @@ class RBFManager(QtWidgets.QDialog):
 
             # Check if a node already exists
             ID = self.ui.ID_LineEdit.text()
-            nodeName = f"{ID}_RBF"
-            json_path = self.ui.FilePath_LineEdit.text()
-            kernel_index = self.ui.Kernel_ComboBox.currentIndex() + 1
 
+            nodeName = f"{ID}_RBF"
             if cmds.objExists(nodeName):
                 node = cmds.ls(nodeName)
             else:
                 node = cmds.createNode("SoxsRBFNode", name=nodeName, skipSelect=True)
+
+            # Get Driver and Driven data
+            driver_text = self.ui.Driver_LineEdit.text()
+            driven_text = self.ui.Driven_LineEdit.text()
+            driver_channel = self.ui.Driver_ComboBox.currentText().lower()
+            driven_channel = self.ui.Driven_ComboBox.currentText().lower()
+            setup = self.ui.Setup_ComboBox.currentText()
+            setup_index = self.ui.Setup_ComboBox.currentIndex()
+            json_path = self.ui.FilePath_LineEdit.text()
+            kernel_index = self.ui.Kernel_ComboBox.currentIndex() + 1
 
             # Write to the Json
             driverData = self.getAllDataFromTable(self.Driver_Table_Model)
@@ -297,12 +290,12 @@ class RBFManager(QtWidgets.QDialog):
                 driverMtrx, drivenMtrx, kernel_index
             )
 
-            iKey = f"i_{ID}"
+            dKey = f"d_{ID}"
             oKey = f"o_{ID}"
             wKey = f"w_{ID}"
 
             writeData = {
-                iKey: driverData,
+                dKey: driverData,
                 oKey: drivenData,
                 wKey: weights.tolist(),
             }
@@ -319,7 +312,7 @@ class RBFManager(QtWidgets.QDialog):
 
                 try:
                     fileData = json.load(f)
-                    fileData[iKey] = driverData
+                    fileData[dKey] = driverData
                     fileData[oKey] = drivenData
                     fileData[wKey] = weights.tolist()
                     f.seek(0)
@@ -330,8 +323,82 @@ class RBFManager(QtWidgets.QDialog):
                 json.dump(fileData, f)
                 f.truncate()
 
-            # Connect up the node
-            self.connectNode()
+            # Clear all attributes on RBF Node
+            nodeAttrs = [
+                f"{nodeName}.InputX",
+                f"{nodeName}.InputY",
+                f"{nodeName}.InputZ",
+                f"{nodeName}.OutputTranslateX",
+                f"{nodeName}.OutputTranslateY",
+                f"{nodeName}.OutputTranslateZ",
+                f"{nodeName}.OutputRotateX",
+                f"{nodeName}.OutputRotateY",
+                f"{nodeName}.OutputRotateZ",
+                f"{nodeName}.OutputScaleX",
+                f"{nodeName}.OutputScaleY",
+                f"{nodeName}.OutputScaleZ",
+            ]
+            for attribute in nodeAttrs:
+                destinationAttrs = (
+                    cmds.listConnections(attribute, plugs=True, source=False) or []
+                )
+                sourceAttrs = (
+                    cmds.listConnections(attribute, plugs=True, destination=False) or []
+                )
+
+                for destAttr in destinationAttrs:
+                    cmds.disconnectAttr(attribute, destAttr)
+                for srcAttr in sourceAttrs:
+                    cmds.disconnectAttr(srcAttr, attribute)
+
+            # Set the Data Path and Data Id on the node
+            cmds.setAttr(f"{nodeName}.RBF_DataPath", json_path, type="string")
+            cmds.setAttr(f"{nodeName}.RBF_DataId", ID, type="string")
+            cmds.setAttr(f"{nodeName}.RBF_Settings", setup_index)
+            cmds.setAttr(f"{nodeName}.RBF_Kernel", kernel_index)
+
+            # Set up connections between Driver, Node, and Driven
+            # TODO: read the XYZ columns and determine the proper connections
+
+            # Setup X input
+            cmds.connectAttr(f"{driver_text}.{driver_channel}X", f"{nodeName}.InputX")
+
+            # If driver setup is 2in
+            if setup[0:3] == "2in":
+                cmds.connectAttr(
+                    f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY"
+                )
+            # If driver setup is 3in
+            elif setup[0:3] == "3in":
+                cmds.connectAttr(
+                    f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY"
+                )
+                cmds.connectAttr(
+                    f"{driver_text}.{driver_channel}Z", f"{nodeName}.InputZ"
+                )
+
+            # Setup X output
+            cmds.connectAttr(
+                f"{nodeName}.Output{driven_channel.title()}X",
+                f"{driven_text}.{driven_channel}X",
+            )
+
+            # If driven setup is 2out
+            if setup[-4:] == "2out":
+                cmds.connectAttr(
+                    f"{nodeName}.Output{driven_channel.title()}Y",
+                    f"{driven_text}.{driven_channel}Y",
+                )
+            # If driven setup is 3out
+            elif setup[-4:] == "3out":
+                cmds.connectAttr(
+                    f"{nodeName}.Output{driven_channel.title()}Y",
+                    f"{driven_text}.{driven_channel}Y",
+                )
+                cmds.connectAttr(
+                    f"{nodeName}.Output{driven_channel.title()}Z",
+                    f"{driven_text}.{driven_channel}Z",
+                )
 
     def LoadDriver(self):
         print("Load Driver")
@@ -346,36 +413,17 @@ class RBFManager(QtWidgets.QDialog):
     def GenerateID(self):
         Driver_Text = self.ui.Driver_LineEdit.text()
         Driven_Text = self.ui.Driven_LineEdit.text()
+        self.ui.ID_LineEdit.setText(f"{Driver_Text}_to_{Driven_Text}")
 
-        Driver_Channel = self.ui.Driver_ComboBox.currentText().lower()
-        Driven_Channel = self.ui.Driven_ComboBox.currentText().lower()
+    def ToggleUpdatesButton(self):
+        button_name = self.ui.ToggleUpdates_Button.text()
 
-        self.ui.ID_LineEdit.setText(
-            f"{Driver_Text}_{Driver_Channel}_to_{Driven_Text}_{Driven_Channel}"
-        )
-
-        self.updateEditableProperties()
-
-    def updateEditableProperties(self):
-        nodes = self.getRBFNode()
-        if len(nodes) > 0:
-            node = nodes[0]
-            json_path = cmds.getAttr(f"{node}.RBF_DataPath")
-            self.ui.FilePath_LineEdit.setText(json_path)
-
-            self.populateTable()
-
-            kernel_index = cmds.getAttr(f"{node}.RBF_Kernel") - 1
-            setup_index = cmds.getAttr(f"{node}.RBF_Settings")
-            print(f"KERNAL INDEX : {kernel_index}")
-            print(f"SETUP INDEX : {setup_index}")
-            self.ui.Kernel_ComboBox.setCurrentIndex(kernel_index)
-            self.ui.Setup_ComboBox.setCurrentIndex(setup_index)
-
+        if button_name == "Freeze Updates":
+            new_name = "Un-Freeze Updates"
         else:
-            self.clearTable(self.Driver_Table_Model)
-            self.clearTable(self.Driven_Table_Model)
-            self.ui.FilePath_LineEdit.setText("")
+            new_name = "Freeze Updates"
+
+        self.ui.ToggleUpdates_Button.setText(new_name)
 
     def showFileSelectDialog(self):
         file_path, self.selected_filter = QtWidgets.QFileDialog.getSaveFileName(
@@ -476,199 +524,6 @@ class RBFManager(QtWidgets.QDialog):
                 "Please select a valid Driver and Driven before adding positions!"
             )
 
-    def getRBFNode(self):
-
-        nodes = []
-
-        driverName = self.ui.Driver_LineEdit.text()
-        drivenName = self.ui.Driven_LineEdit.text()
-
-        if cmds.objExists(driverName) and cmds.objExists(drivenName):
-            id = self.ui.ID_LineEdit.text()
-            nodeName = f"{id}_RBF"
-
-            nodes = cmds.ls(nodeName, ap=True)
-
-            if len(nodes) <= 0:
-                cmds.warning(f"No RBF Node found for {nodeName}")
-
-        return nodes
-
-    def onDeleteRBFConnection(self):
-
-        id = self.ui.ID_LineEdit.text()
-        nodes = self.getRBFNode()
-
-        self.clearTable(self.Driver_Table_Model)
-        self.clearTable(self.Driven_Table_Model)
-
-        for node in nodes:
-
-            # Clean up the data from the JSON
-            json_path = cmds.getAttr(f"{node}.RBF_DataPath")
-
-            with open(json_path, "r+") as f:
-                file_data = json.load(f)
-                file_data.pop(f"i_{id}")
-                file_data.pop(f"o_{id}")
-                file_data.pop(f"w_{id}")
-
-                json.dump(file_data, f)
-
-            # Delete the node itself
-            cmds.delete(node)
-
-            cmds.warning(f"Deleted RBF node {node}")
-            print(f"Deleted RBF node {node}")
-
-    def populateTable(self):
-        id = self.ui.ID_LineEdit.text()
-        json_path = self.ui.FilePath_LineEdit.text()
-
-        self.clearTable(self.Driver_Table_Model)
-        self.clearTable(self.Driven_Table_Model)
-
-        with open(json_path, "r") as f:
-            file_data = json.load(f)
-
-            inputs = file_data[f"i_{id}"]
-            outputs = file_data[f"o_{id}"]
-            weights = file_data[f"w_{id}"]
-
-        print("INPUTS")
-        for item in inputs:
-            print(item)
-            self.addToTable(self.Driver_Table_Model, item)
-
-        print("OUTPUTS")
-        for item in outputs:
-            print(item)
-            self.addToTable(self.Driven_Table_Model, item)
-
-    def onClearDriver(self):
-        self.ui.Driver_LineEdit.setText("")
-
-    def onClearDriven(self):
-        self.ui.Driven_LineEdit.setText("")
-
-    def onToggleUpdates(self):
-
-        button_name = self.ui.ToggleUpdates_Button.text()
-
-        if button_name == "Freeze Updates":
-            new_name = "Un-Freeze Updates"
-            self.disconnectNode()
-        else:
-            new_name = "Freeze Updates"
-            self.connectNode()
-
-        self.ui.ToggleUpdates_Button.setText(new_name)
-
-    def disconnectNode(self):
-
-        # Check if a node already exists
-        ID = self.ui.ID_LineEdit.text()
-        nodeName = f"{ID}_RBF"
-
-        if not cmds.objExists(nodeName):
-            cmds.error(f"Could not find node for : {nodeName}")
-            return
-
-        # Clear all attributes on RBF Node
-        nodeAttrs = [
-            f"{nodeName}.InputX",
-            f"{nodeName}.InputY",
-            f"{nodeName}.InputZ",
-            f"{nodeName}.OutputTranslateX",
-            f"{nodeName}.OutputTranslateY",
-            f"{nodeName}.OutputTranslateZ",
-            f"{nodeName}.OutputRotateX",
-            f"{nodeName}.OutputRotateY",
-            f"{nodeName}.OutputRotateZ",
-            f"{nodeName}.OutputScaleX",
-            f"{nodeName}.OutputScaleY",
-            f"{nodeName}.OutputScaleZ",
-        ]
-
-        for attribute in nodeAttrs:
-            destinationAttrs = (
-                cmds.listConnections(attribute, plugs=True, source=False) or []
-            )
-            sourceAttrs = (
-                cmds.listConnections(attribute, plugs=True, destination=False) or []
-            )
-
-            for destAttr in destinationAttrs:
-                cmds.disconnectAttr(attribute, destAttr)
-            for srcAttr in sourceAttrs:
-                cmds.disconnectAttr(srcAttr, attribute)
-
-    def connectNode(self):
-
-        # Check if a node already exists
-        ID = self.ui.ID_LineEdit.text()
-        nodeName = f"{ID}_RBF"
-
-        if not cmds.objExists(nodeName):
-            cmds.error(f"Could not find node for : {nodeName}")
-            return
-
-        # Get Driver and Driven data
-        driver_text = self.ui.Driver_LineEdit.text()
-        driven_text = self.ui.Driven_LineEdit.text()
-        driver_channel = self.ui.Driver_ComboBox.currentText().lower()
-        driven_channel = self.ui.Driven_ComboBox.currentText().lower()
-        setup = self.ui.Setup_ComboBox.currentText()
-        setup_index = self.ui.Setup_ComboBox.currentIndex()
-        json_path = self.ui.FilePath_LineEdit.text()
-        kernel_index = self.ui.Kernel_ComboBox.currentIndex() + 1
-
-        # Disconnect all current inputs and outputs
-        self.disconnectNode()
-
-        # Set the Data Path and Data Id on the node
-        cmds.setAttr(f"{nodeName}.RBF_DataPath", json_path, type="string")
-        cmds.setAttr(f"{nodeName}.RBF_DataId", ID, type="string")
-        cmds.setAttr(f"{nodeName}.RBF_Settings", setup_index)
-        cmds.setAttr(f"{nodeName}.RBF_Kernel", kernel_index)
-
-        # Set up connections between Driver, Node, and Driven
-        # TODO: read the XYZ columns and determine the proper connections
-
-        # Setup X input
-        cmds.connectAttr(f"{driver_text}.{driver_channel}X", f"{nodeName}.InputX")
-
-        # If driver setup is 2in
-        if setup[0:3] == "2in":
-            cmds.connectAttr(f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY")
-        # If driver setup is 3in
-        elif setup[0:3] == "3in":
-            cmds.connectAttr(f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY")
-            cmds.connectAttr(f"{driver_text}.{driver_channel}Z", f"{nodeName}.InputZ")
-
-        # Setup X output
-        cmds.connectAttr(
-            f"{nodeName}.Output{driven_channel.title()}X",
-            f"{driven_text}.{driven_channel}X",
-        )
-
-        # If driven setup is 2out
-        if setup[-4:] == "2out":
-            cmds.connectAttr(
-                f"{nodeName}.Output{driven_channel.title()}Y",
-                f"{driven_text}.{driven_channel}Y",
-            )
-        # If driven setup is 3out
-        elif setup[-4:] == "3out":
-            cmds.connectAttr(
-                f"{nodeName}.Output{driven_channel.title()}Y",
-                f"{driven_text}.{driven_channel}Y",
-            )
-            cmds.connectAttr(
-                f"{nodeName}.Output{driven_channel.title()}Z",
-                f"{driven_text}.{driven_channel}Z",
-            )
-
 
 class RBFCalc:
     # Calculate the Weight matrix
@@ -735,10 +590,10 @@ class RBFCalc:
             w_array_string.replace("\n", "").replace(" ", "").replace("0.", "0.0")
         )
 
-        out = f'"i_{unique_id}":{p_formatted_string},"o_{unique_id}":{o_formatted_string},"w_{unique_id}":{w_formatted_string}'
+        out = f'"d_{unique_id}":{p_formatted_string},"o_{unique_id}":{o_formatted_string},"w_{unique_id}":{w_formatted_string}'
 
         out_dict = {
-            f"i_{unique_id}": input_mtrx.tolist(),
+            f"d_{unique_id}": input_mtrx.tolist(),
             f"o_{unique_id}": output_mtrx.tolist(),
             f"w_{unique_id}": weight_mtrx.tolist(),
         }
