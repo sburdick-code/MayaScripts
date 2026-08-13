@@ -59,9 +59,6 @@ class RBFManager(QtWidgets.QDialog):
         self.createCustomContextMenu()
         self.setupTables()
 
-        print(self.getDataFromTable(self.Driver_Table_Model, 0, 1))
-        print(self.verifyValidInputs())
-
         self.ui.Driver_LineEdit.textChanged.connect(self.LoadDriver)
         self.ui.AddDriver_Button.clicked.connect(
             lambda: self.UpdateTextToSelection(self.ui.Driver_LineEdit)
@@ -73,6 +70,9 @@ class RBFManager(QtWidgets.QDialog):
 
         self.ui.ClearDriver_Button.clicked.connect(self.onClearDriver)
         self.ui.ClearDriven_Button.clicked.connect(self.onClearDriven)
+
+        self.ui.Driver_ComboBox.currentIndexChanged.connect(self.GenerateID)
+        self.ui.Driven_ComboBox.currentIndexChanged.connect(self.GenerateID)
 
         self.ui.GenerateID_Button.clicked.connect(self.GenerateID)
 
@@ -167,14 +167,6 @@ class RBFManager(QtWidgets.QDialog):
         for i in range(3):
             self.ui.Driven_Table.setColumnWidth(i, 50)
 
-        # Debug Setup some default values
-        items = ["0.0", "0.0", "0.0"]
-        self.addToTable(self.Driver_Table_Model, items)
-
-        # Debug Setup some default values
-        items = ["1", "0.2", "3.0"]
-        self.addToTable(self.Driven_Table_Model, items)
-
     def addToTable(self, model, items):
 
         formatted = []
@@ -200,7 +192,11 @@ class RBFManager(QtWidgets.QDialog):
                 if self.isNumber(model.item(row, i).text()):
                     dataOut.append(float(model.item(row, i).text()))
         else:
-            dataOut.append(float(model.item(row, col).text()))
+            if self.isNumber(model.item(row, col).text()):
+                dataOut.append(float(model.item(row, col).text()))
+            else:
+                print("lol! You triggered an error >:)")
+                dataOut.append("I'm here to cause an error >:)")
 
         return dataOut
 
@@ -208,8 +204,25 @@ class RBFManager(QtWidgets.QDialog):
 
         dataOut = []
 
+        if model is self.Driver_Table_Model:
+            setup = self.ui.DriverSetup_ComboBox.currentText()
+            print("SAVING INPUTS")
+        else:
+            setup = self.ui.DrivenSetup_ComboBox.currentText()
+            print("SAVING OUTPUTS")
+
         for i in range(model.rowCount()):
-            dataOut.append(self.getDataFromTable(model, i))
+            row = []
+            if "x" in setup:
+                row.append(self.getDataFromTable(model, i, 0)[0])
+            if "y" in setup:
+                row.append(self.getDataFromTable(model, i, 1)[0])
+            if "z" in setup:
+                row.append(self.getDataFromTable(model, i, 2)[0])
+
+            dataOut.append(row)
+
+        print(dataOut)
 
         return dataOut
 
@@ -233,7 +246,6 @@ class RBFManager(QtWidgets.QDialog):
         cPosition = position + QtCore.QPoint(20, 25)
 
         if item:
-            print(item.row(), item.data())
 
             if item.row() == -1:  # Nothing is selected
                 self.add_context_menu.exec_(self.ui.Driver_Table.mapToGlobal(cPosition))
@@ -250,7 +262,6 @@ class RBFManager(QtWidgets.QDialog):
         cPosition = position + QtCore.QPoint(20, 25)
 
         if item:
-            print(item.row(), item.data())
 
             if item.row() == -1:  # Nothing is selected
                 self.add_context_menu.exec_(self.ui.Driven_Table.mapToGlobal(cPosition))
@@ -262,13 +273,8 @@ class RBFManager(QtWidgets.QDialog):
                     self.ui.Driven_Table.mapToGlobal(cPosition)
                 )
 
-    def doSomething(self):
-        print("### TODO ###")
-
     def UpdateTextToSelection(self, LineEdit):
-        print("Button Pressed")
         selected = cmds.ls(selection=True)[0]
-        print(selected)
         LineEdit.setText(str(selected))
 
     def updateRBFNode(self):
@@ -297,36 +303,43 @@ class RBFManager(QtWidgets.QDialog):
                 driverMtrx, drivenMtrx, kernel_index
             )
 
+            driverSetup = self.ui.DriverSetup_ComboBox.currentText()
+            drivenSetup = self.ui.DrivenSetup_ComboBox.currentText()
+            attributeData = [driverSetup, drivenSetup]
+
+            aKey = f"a_{ID}"
             iKey = f"i_{ID}"
             oKey = f"o_{ID}"
             wKey = f"w_{ID}"
 
             writeData = {
+                aKey: attributeData,
                 iKey: driverData,
                 oKey: drivenData,
                 wKey: weights.tolist(),
             }
 
-            if not os.path.isfile(json_path):
-                try:
-                    with open(json_path, "w") as f:
-                        pass
-                except:
-                    cmds.error(f"Could not write json to : {json_path}")
-                    return
+            # Read the JSON
+            try:
+                with open(json_path, "r") as f:
 
-            with open(json_path, "r+") as f:
+                    try:
+                        fileData = json.load(f)
 
-                try:
-                    fileData = json.load(f)
-                    fileData[iKey] = driverData
-                    fileData[oKey] = drivenData
-                    fileData[wKey] = weights.tolist()
-                    f.seek(0)
+                        fileData[aKey] = attributeData
+                        fileData[iKey] = driverData
+                        fileData[oKey] = drivenData
+                        fileData[wKey] = weights.tolist()
 
-                except:
-                    fileData = writeData
+                    except json.JSONDecodeError:
+                        fileData = writeData
 
+            except FileNotFoundError:
+                cmds.error(f"Could not write json to : {json_path}")
+                return
+
+            # Write to the JSON
+            with open(json_path, "w") as f:
                 json.dump(fileData, f)
                 f.truncate()
 
@@ -359,23 +372,25 @@ class RBFManager(QtWidgets.QDialog):
     def updateEditableProperties(self):
         nodes = self.getRBFNode()
         if len(nodes) > 0:
+            id = self.ui.ID_LineEdit.text()
             node = nodes[0]
             json_path = cmds.getAttr(f"{node}.RBF_DataPath")
             self.ui.FilePath_LineEdit.setText(json_path)
 
-            self.populateTable()
-
             kernel_index = cmds.getAttr(f"{node}.RBF_Kernel") - 1
-            setup_index = cmds.getAttr(f"{node}.RBF_Settings")
-            print(f"KERNAL INDEX : {kernel_index}")
-            print(f"SETUP INDEX : {setup_index}")
             self.ui.Kernel_ComboBox.setCurrentIndex(kernel_index)
-            self.ui.Setup_ComboBox.setCurrentIndex(setup_index)
+
+            with open(json_path, "r") as f:
+                fileData = json.load(f)
+                self.ui.DriverSetup_ComboBox.setCurrentText(fileData[f"a_{id}"][0])
+                self.ui.DrivenSetup_ComboBox.setCurrentText(fileData[f"a_{id}"][1])
+
+            self.populateTable()
 
         else:
             self.clearTable(self.Driver_Table_Model)
             self.clearTable(self.Driven_Table_Model)
-            self.ui.FilePath_LineEdit.setText("")
+            # self.ui.FilePath_LineEdit.setText("")
 
     def showFileSelectDialog(self):
         file_path, self.selected_filter = QtWidgets.QFileDialog.getSaveFileName(
@@ -389,7 +404,6 @@ class RBFManager(QtWidgets.QDialog):
         row = item.row()
         col = item.column()
         value = item.text()
-        print(row, col, value)
 
     def onSave(self):
         self.updateRBFNode()
@@ -441,7 +455,6 @@ class RBFManager(QtWidgets.QDialog):
             return False
 
     def onGoToPosition(self):
-        setup = self.ui.Setup_ComboBox.currentText()
         DriverName = self.ui.Driver_LineEdit.text()
         DrivenName = self.ui.Driven_LineEdit.text()
         DriverAttr = self.ui.Driver_ComboBox.currentText().lower()
@@ -519,7 +532,6 @@ class RBFManager(QtWidgets.QDialog):
             cmds.delete(node)
 
             cmds.warning(f"Deleted RBF node {node}")
-            print(f"Deleted RBF node {node}")
 
     def populateTable(self):
         id = self.ui.ID_LineEdit.text()
@@ -531,19 +543,45 @@ class RBFManager(QtWidgets.QDialog):
         with open(json_path, "r") as f:
             file_data = json.load(f)
 
+            DriverSetup = file_data[f"a_{id}"][0]
+            DrivenSetup = file_data[f"a_{id}"][1]
             inputs = file_data[f"i_{id}"]
             outputs = file_data[f"o_{id}"]
             weights = file_data[f"w_{id}"]
 
         print("INPUTS")
         for item in inputs:
-            print(item)
-            self.addToTable(self.Driver_Table_Model, item)
+            index = 0
+            tableItem = ["", "", ""]
+
+            if "x" in DriverSetup:
+                tableItem[0] = item[index]
+                index += 1
+            if "y" in DriverSetup:
+                tableItem[1] = item[index]
+                index += 1
+            if "z" in DriverSetup:
+                tableItem[2] = item[index]
+
+            print(tableItem)
+            self.addToTable(self.Driver_Table_Model, tableItem)
 
         print("OUTPUTS")
         for item in outputs:
-            print(item)
-            self.addToTable(self.Driven_Table_Model, item)
+            index = 0
+            tableItem = ["", "", ""]
+
+            if "x" in DrivenSetup:
+                tableItem[0] = item[index]
+                index += 1
+            if "y" in DrivenSetup:
+                tableItem[1] = item[index]
+                index += 1
+            if "z" in DrivenSetup:
+                tableItem[2] = item[index]
+
+            print(tableItem)
+            self.addToTable(self.Driven_Table_Model, tableItem)
 
     def onClearDriver(self):
         self.ui.Driver_LineEdit.setText("")
@@ -603,6 +641,23 @@ class RBFManager(QtWidgets.QDialog):
             for srcAttr in sourceAttrs:
                 cmds.disconnectAttr(srcAttr, attribute)
 
+    def getSetupIndex(self, iString, oString):
+        setupArray = [
+            "1in->1out",
+            "1in->2out",
+            "1in->3out",
+            "2in->1out",
+            "2in->2out",
+            "2in->3out",
+            "3in->1out",
+            "3in->2out",
+            "3in->3out",
+        ]
+
+        lookupString = f"{len(iString)}in->{len(oString)}out"
+
+        return setupArray.index(lookupString)
+
     def connectNode(self):
 
         # Check if a node already exists
@@ -618,8 +673,9 @@ class RBFManager(QtWidgets.QDialog):
         driven_text = self.ui.Driven_LineEdit.text()
         driver_channel = self.ui.Driver_ComboBox.currentText().lower()
         driven_channel = self.ui.Driven_ComboBox.currentText().lower()
-        setup = self.ui.Setup_ComboBox.currentText()
-        setup_index = self.ui.Setup_ComboBox.currentIndex()
+        driverSetup = self.ui.DriverSetup_ComboBox.currentText()
+        drivenSetup = self.ui.DrivenSetup_ComboBox.currentText()
+        setup_index = self.getSetupIndex(driverSetup, drivenSetup)
         json_path = self.ui.FilePath_LineEdit.text()
         kernel_index = self.ui.Kernel_ComboBox.currentIndex() + 1
 
@@ -632,42 +688,47 @@ class RBFManager(QtWidgets.QDialog):
         cmds.setAttr(f"{nodeName}.RBF_Settings", setup_index)
         cmds.setAttr(f"{nodeName}.RBF_Kernel", kernel_index)
 
-        # Set up connections between Driver, Node, and Driven
-        # TODO: read the XYZ columns and determine the proper connections
+        # Data to help handle the driver hookups
+        iInput = 0
+        iOutput = 0
+        coords = ["X", "Y", "Z"]
 
-        # Setup X input
-        cmds.connectAttr(f"{driver_text}.{driver_channel}X", f"{nodeName}.InputX")
-
-        # If driver setup is 2in
-        if setup[0:3] == "2in":
-            cmds.connectAttr(f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY")
-        # If driver setup is 3in
-        elif setup[0:3] == "3in":
-            cmds.connectAttr(f"{driver_text}.{driver_channel}Y", f"{nodeName}.InputY")
-            cmds.connectAttr(f"{driver_text}.{driver_channel}Z", f"{nodeName}.InputZ")
-
-        # Setup X output
-        cmds.connectAttr(
-            f"{nodeName}.Output{driven_channel.title()}X",
-            f"{driven_text}.{driven_channel}X",
-        )
-
-        # If driven setup is 2out
-        if setup[-4:] == "2out":
+        # Hookup Driver to Input Attributes
+        if "x" in driverSetup:
             cmds.connectAttr(
-                f"{nodeName}.Output{driven_channel.title()}Y",
+                f"{driver_text}.{driver_channel}X", f"{nodeName}.Input{coords[iInput]}"
+            )
+            iInput += 1
+        if "y" in driverSetup:
+            cmds.connectAttr(
+                f"{driver_text}.{driver_channel}Y", f"{nodeName}.Input{coords[iInput]}"
+            )
+            iInput += 1
+        if "z" in driverSetup:
+            cmds.connectAttr(
+                f"{driver_text}.{driver_channel}Z", f"{nodeName}.Input{coords[iInput]}"
+            )
+            iInput += 1
+
+        # Hookup Output to Driven Attributes
+        if "x" in drivenSetup:
+            cmds.connectAttr(
+                f"{nodeName}.Output{driven_channel.title()}{coords[iOutput]}",
+                f"{driven_text}.{driven_channel}X",
+            )
+            iOutput += 1
+        if "y" in drivenSetup:
+            cmds.connectAttr(
+                f"{nodeName}.Output{driven_channel.title()}{coords[iOutput]}",
                 f"{driven_text}.{driven_channel}Y",
             )
-        # If driven setup is 3out
-        elif setup[-4:] == "3out":
+            iOutput += 1
+        if "z" in drivenSetup:
             cmds.connectAttr(
-                f"{nodeName}.Output{driven_channel.title()}Y",
-                f"{driven_text}.{driven_channel}Y",
-            )
-            cmds.connectAttr(
-                f"{nodeName}.Output{driven_channel.title()}Z",
+                f"{nodeName}.Output{driven_channel.title()}{coords[iOutput]}",
                 f"{driven_text}.{driven_channel}Z",
             )
+            iOutput += 1
 
 
 class RBFCalc:

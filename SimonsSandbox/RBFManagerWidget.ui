@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>554</width>
-    <height>482</height>
+    <height>494</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -26,10 +26,10 @@
         </widget>
        </item>
        <item>
+        <widget class="QLineEdit" name="Driver_LineEdit"/>
+       </item>
+       <item>
         <layout class="QHBoxLayout" name="horizontalLayout_2">
-         <item>
-          <widget class="QLineEdit" name="Driver_LineEdit"/>
-         </item>
          <item>
           <widget class="QPushButton" name="AddDriver_Button">
            <property name="text">
@@ -37,31 +37,101 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QPushButton" name="ClearDriver_Button">
+           <property name="text">
+            <string>Clear Driver</string>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
        <item>
-        <widget class="QComboBox" name="Driver_ComboBox">
-         <item>
-          <property name="text">
-           <string>Translate</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Rotate</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Scale</string>
-          </property>
-         </item>
+        <widget class="Line" name="line_3">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
         </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_10">
+         <item>
+          <widget class="QComboBox" name="Driver_ComboBox">
+           <item>
+            <property name="text">
+             <string>Translate</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Rotate</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Scale</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="DriverSetup_ComboBox">
+           <property name="maximumSize">
+            <size>
+             <width>50</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <item>
+            <property name="text">
+             <string>x</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>y</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>z</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>xy</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>xz</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>yz</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>xyz</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="QTableView" name="Driver_Table"/>
        </item>
       </layout>
+     </item>
+     <item>
+      <widget class="Line" name="line_5">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+      </widget>
      </item>
      <item>
       <layout class="QVBoxLayout" name="DrivenLayout">
@@ -73,10 +143,10 @@
         </widget>
        </item>
        <item>
+        <widget class="QLineEdit" name="Driven_LineEdit"/>
+       </item>
+       <item>
         <layout class="QHBoxLayout" name="horizontalLayout_3">
-         <item>
-          <widget class="QLineEdit" name="Driven_LineEdit"/>
-         </item>
          <item>
           <widget class="QPushButton" name="AddDriven_Button">
            <property name="text">
@@ -84,26 +154,89 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QPushButton" name="ClearDriven_Button">
+           <property name="text">
+            <string>Clear Driven</string>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
        <item>
-        <widget class="QComboBox" name="Driven_ComboBox">
-         <item>
-          <property name="text">
-           <string>Translate</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Rotate</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Scale</string>
-          </property>
-         </item>
+        <widget class="Line" name="line_4">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
         </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_11">
+         <item>
+          <widget class="QComboBox" name="Driven_ComboBox">
+           <item>
+            <property name="text">
+             <string>Translate</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Rotate</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Scale</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="DrivenSetup_ComboBox">
+           <property name="maximumSize">
+            <size>
+             <width>50</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <item>
+            <property name="text">
+             <string>x</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>y</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>z</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>xy</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>xz</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>yz</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>xyz</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="QTableView" name="Driven_Table"/>
@@ -115,76 +248,7 @@
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_4">
      <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_6">
-       <item>
-        <widget class="QLabel" name="label_6">
-         <property name="text">
-          <string>Setup:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QComboBox" name="Setup_ComboBox">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="currentText">
-          <string>3in-&gt;3out</string>
-         </property>
-         <property name="currentIndex">
-          <number>8</number>
-         </property>
-         <item>
-          <property name="text">
-           <string>1in-&gt;1out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>1in-&gt;2out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>1in-&gt;3out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>2in-&gt;1out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>2in-&gt;2out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>2in-&gt;3out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>3in-&gt;1out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>3in-&gt;2out</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>3in-&gt;3out</string>
-          </property>
-         </item>
-        </widget>
-       </item>
-      </layout>
+      <layout class="QHBoxLayout" name="horizontalLayout_6"/>
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_7">
