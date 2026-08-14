@@ -82,6 +82,9 @@
              <height>16777215</height>
             </size>
            </property>
+           <property name="currentText">
+            <string>xyz</string>
+           </property>
            <item>
             <property name="text">
              <string>x</string>
@@ -198,6 +201,9 @@
              <width>50</width>
              <height>16777215</height>
             </size>
+           </property>
+           <property name="currentText">
+            <string>xyz</string>
            </property>
            <item>
             <property name="text">
@@ -378,7 +384,7 @@
      <item>
       <widget class="QPushButton" name="Delete_Button">
        <property name="text">
-        <string>Delete RBF Connection</string>
+        <string>Delete RBF Node</string>
        </property>
       </widget>
      </item>

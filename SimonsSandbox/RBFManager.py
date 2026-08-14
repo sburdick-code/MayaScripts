@@ -27,7 +27,7 @@ class RBFManager(QtWidgets.QDialog):
     UI_FILE = r"Z:\Projects\MayaScripts\SimonsSandbox\RBFManagerWidget.ui"
 
     FILE_FILTERS = "JSON (*.json)"
-    selected_filter = "JSON (*.json)"
+    SELECTED_FILTER = "JSON (*.json)"
 
     curRow = -1
 
@@ -121,6 +121,10 @@ class RBFManager(QtWidgets.QDialog):
 
     def setupTables(self):
 
+        # Setup default value for combo boxes
+        self.ui.DriverSetup_ComboBox.setCurrentIndex(6)
+        self.ui.DrivenSetup_ComboBox.setCurrentIndex(6)
+
         # Driver Table
         self.Driver_Table_Model = QtGui.QStandardItemModel(0, 3)  # 1 rows, 4 columns
         self.Driver_Table_Model.setHorizontalHeaderLabels(["X", "Y", "Z"])
@@ -180,8 +184,32 @@ class RBFManager(QtWidgets.QDialog):
         model.removeRow(row)
 
     def clearTable(self, model):
+
         for row in range(model.rowCount()):
             model.removeRow(0)
+
+    def clearAllTables(self, check=False):
+        print("Clear All Tables")
+        print(self.Driver_Table_Model.rowCount())
+        if check and self.Driver_Table_Model.rowCount() > 0:
+            result = QtWidgets.QMessageBox.question(
+                self,
+                "Confirm",
+                "Clear the tables?",
+                QtWidgets.QMessageBox.StandardButton.Yes
+                | QtWidgets.QMessageBox.StandardButton.No,
+            )
+
+            if result == QtWidgets.QMessageBox.StandardButton.Yes:
+                print("chose yes!")
+                self.clearTable(self.Driver_Table_Model)
+                self.clearTable(self.Driven_Table_Model)
+            else:
+                return
+
+        else:
+            self.clearTable(self.Driver_Table_Model)
+            self.clearTable(self.Driven_Table_Model)
 
     def getDataFromTable(self, model, row, col=-1):
 
@@ -307,16 +335,13 @@ class RBFManager(QtWidgets.QDialog):
             drivenSetup = self.ui.DrivenSetup_ComboBox.currentText()
             attributeData = [driverSetup, drivenSetup]
 
-            aKey = f"a_{ID}"
-            iKey = f"i_{ID}"
-            oKey = f"o_{ID}"
-            wKey = f"w_{ID}"
-
             writeData = {
-                aKey: attributeData,
-                iKey: driverData,
-                oKey: drivenData,
-                wKey: weights.tolist(),
+                ID: {
+                    "setup": attributeData,
+                    "inputs": driverData,
+                    "outputs": drivenData,
+                    "weights": weights.tolist(),
+                }
             }
 
             # Read the JSON
@@ -326,12 +351,13 @@ class RBFManager(QtWidgets.QDialog):
                     try:
                         fileData = json.load(f)
 
-                        fileData[aKey] = attributeData
-                        fileData[iKey] = driverData
-                        fileData[oKey] = drivenData
-                        fileData[wKey] = weights.tolist()
+                        # edit fileData's values and update to the set ones
+                        fileData[ID]["setup"] = attributeData
+                        fileData[ID]["inputs"] = driverData
+                        fileData[ID]["outputs"] = drivenData
+                        fileData[ID]["weights"] = weights.tolist()
 
-                    except json.JSONDecodeError:
+                    except:
                         fileData = writeData
 
             except FileNotFoundError:
@@ -382,19 +408,19 @@ class RBFManager(QtWidgets.QDialog):
 
             with open(json_path, "r") as f:
                 fileData = json.load(f)
-                self.ui.DriverSetup_ComboBox.setCurrentText(fileData[f"a_{id}"][0])
-                self.ui.DrivenSetup_ComboBox.setCurrentText(fileData[f"a_{id}"][1])
+                self.ui.DriverSetup_ComboBox.setCurrentText(fileData[id]["setup"][0])
+                self.ui.DrivenSetup_ComboBox.setCurrentText(fileData[id]["setup"][1])
 
             self.populateTable()
 
         else:
-            self.clearTable(self.Driver_Table_Model)
-            self.clearTable(self.Driven_Table_Model)
+            doCheck = True
+            self.clearAllTables(doCheck)
             # self.ui.FilePath_LineEdit.setText("")
 
     def showFileSelectDialog(self):
-        file_path, self.selected_filter = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Select File", "", self.FILE_FILTERS, self.selected_filter
+        file_path, self.SELECTED_FILTER = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Select File", "", self.FILE_FILTERS, self.SELECTED_FILTER
         )
         if file_path:
             self.ui.FilePath_LineEdit.setText(file_path)
@@ -414,6 +440,8 @@ class RBFManager(QtWidgets.QDialog):
         DrivenName = self.ui.Driven_LineEdit.text()
         DriverAttr = self.ui.Driver_ComboBox.currentText().lower()
         DrivenAttr = self.ui.Driven_ComboBox.currentText().lower()
+        DriverSetup = self.ui.DriverSetup_ComboBox.currentText()
+        DrivenSetup = self.ui.DrivenSetup_ComboBox.currentText()
 
         if cmds.objExists(DriverName) and cmds.objExists(DrivenName):
             try:
@@ -421,6 +449,20 @@ class RBFManager(QtWidgets.QDialog):
                 DrivenPos = cmds.getAttr(f"{DrivenName}.{DrivenAttr}")[0]
                 DriverPos = [f"{item:.3f}" for item in DriverPos]
                 DrivenPos = [f"{item:.3f}" for item in DrivenPos]
+
+                if "x" not in DriverSetup:
+                    DriverPos[0] = ""
+                if "y" not in DriverSetup:
+                    DriverPos[1] = ""
+                if "z" not in DriverSetup:
+                    DriverPos[2] = ""
+
+                if "x" not in DrivenSetup:
+                    DrivenPos[0] = ""
+                if "y" not in DrivenSetup:
+                    DrivenPos[1] = ""
+                if "z" not in DrivenSetup:
+                    DrivenPos[2] = ""
 
                 self.addToTable(self.Driver_Table_Model, DriverPos)
                 self.addToTable(self.Driven_Table_Model, DrivenPos)
@@ -459,30 +501,48 @@ class RBFManager(QtWidgets.QDialog):
         DrivenName = self.ui.Driven_LineEdit.text()
         DriverAttr = self.ui.Driver_ComboBox.currentText().lower()
         DrivenAttr = self.ui.Driven_ComboBox.currentText().lower()
+        DriverSetup = self.ui.DriverSetup_ComboBox.currentText()
+        DrivenSetup = self.ui.DrivenSetup_ComboBox.currentText()
 
         DriverPos = self.getDataFromTable(self.Driver_Table_Model, self.curRow)
         DrivenPos = self.getDataFromTable(self.Driven_Table_Model, self.curRow)
 
-        if cmds.objExists(DriverName) and cmds.objExists(DrivenName):
-            try:
-                for i in range(3):
-                    if self.isNumber(DriverPos[i]):
-                        coord = self.getXYZ(i)
-                        attr = f"{DriverName}.{DriverAttr}{coord}"
-                        pos = float(DriverPos[i])
-                        cmds.setAttr(attr, pos)
-            except:
-                cmds.warning("Error setting Driver Position")
+        print(DriverPos)
 
-            try:
-                for i in range(3):
-                    if self.isNumber(DrivenPos[i]):
-                        coord = self.getXYZ(i)
-                        attr = f"{DrivenName}.{DrivenAttr}{coord}"
-                        pos = float(DrivenPos[i])
-                        cmds.setAttr(attr, pos)
-            except:
-                pass
+        if cmds.objExists(DriverName) and cmds.objExists(DrivenName):
+            index = 0
+
+            if "x" in DriverSetup:
+                attr = f"{DriverName}.{DriverAttr}X"
+                pos = float(DriverPos[index])
+                cmds.setAttr(attr, pos)
+                index += 1
+            if "y" in DriverSetup:
+                attr = f"{DriverName}.{DriverAttr}Y"
+                pos = float(DriverPos[index])
+                cmds.setAttr(attr, pos)
+                index += 1
+            if "z" in DriverSetup:
+                attr = f"{DriverName}.{DriverAttr}Z"
+                pos = float(DriverPos[index])
+                cmds.setAttr(attr, pos)
+
+            index = 0
+
+            if "x" in DrivenSetup:
+                attr = f"{DrivenName}.{DrivenAttr}X"
+                pos = float(DrivenPos[index])
+                cmds.setAttr(attr, pos)
+                index += 1
+            if "y" in DrivenSetup:
+                attr = f"{DrivenName}.{DrivenAttr}Y"
+                pos = float(DrivenPos[index])
+                cmds.setAttr(attr, pos)
+                index += 1
+            if "z" in DrivenSetup:
+                attr = f"{DrivenName}.{DrivenAttr}Z"
+                pos = float(DrivenPos[index])
+                cmds.setAttr(attr, pos)
 
         else:
             cmds.warning(
@@ -512,8 +572,8 @@ class RBFManager(QtWidgets.QDialog):
         id = self.ui.ID_LineEdit.text()
         nodes = self.getRBFNode()
 
-        self.clearTable(self.Driver_Table_Model)
-        self.clearTable(self.Driven_Table_Model)
+        doCheck = True
+        self.clearAllTables(doCheck)
 
         for node in nodes:
 
@@ -522,10 +582,7 @@ class RBFManager(QtWidgets.QDialog):
 
             with open(json_path, "r+") as f:
                 file_data = json.load(f)
-                file_data.pop(f"i_{id}")
-                file_data.pop(f"o_{id}")
-                file_data.pop(f"w_{id}")
-
+                file_data.pop(id)
                 json.dump(file_data, f)
 
             # Delete the node itself
@@ -543,11 +600,14 @@ class RBFManager(QtWidgets.QDialog):
         with open(json_path, "r") as f:
             file_data = json.load(f)
 
-            DriverSetup = file_data[f"a_{id}"][0]
-            DrivenSetup = file_data[f"a_{id}"][1]
-            inputs = file_data[f"i_{id}"]
-            outputs = file_data[f"o_{id}"]
-            weights = file_data[f"w_{id}"]
+            if id in file_data:
+                node_data = file_data[id]
+
+                DriverSetup = node_data["setup"][0]
+                DrivenSetup = node_data["setup"][1]
+                inputs = node_data["inputs"]
+                outputs = node_data["outputs"]
+                weights = node_data["weights"]
 
         print("INPUTS")
         for item in inputs:

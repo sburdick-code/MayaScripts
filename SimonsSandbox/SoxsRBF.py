@@ -98,17 +98,25 @@ class SoxsRBFNode(om.MPxNode):
             with open(in_matrix_path, "r") as f:
                 rbf_data = json.load(f)
 
-                dist_key = f"i_{rbf_id}"
-                weight_key = f"w_{rbf_id}"
+                dist_key = f"inputs"
+                weight_key = f"weights"
+
+                if rbf_id not in rbf_data:
+                    om.MGlobal.displayError(
+                        f"Failed to find ID for RBF Node. ID should be : {rbf_id}!"
+                    )
+                    return
+                else:
+                    rbf_data = rbf_data[rbf_id]
 
                 if dist_key not in rbf_data:
                     om.MGlobal.displayError(
-                        f"Failed to find Distance Matrix for {rbf_id}. Key should be labeled as {dist_key}!"
+                        f"Failed to find Distance Matrix for {rbf_id}. Key should be labeled as : {dist_key}!"
                     )
                     return
                 if weight_key not in rbf_data:
                     om.MGlobal.displayError(
-                        f"Failed to find Weight Matrix for {rbf_id}. Key should be labeled as {weight_key}!"
+                        f"Failed to find Weight Matrix for {rbf_id}. Key should be labeled as : {weight_key}!"
                     )
                     return
 
