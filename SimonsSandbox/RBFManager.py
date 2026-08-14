@@ -344,6 +344,10 @@ class RBFManager(QtWidgets.QDialog):
                 }
             }
 
+            if not os.path.isfile(json_path):
+                with open(json_path, "w") as f:
+                    f.write("")
+
             # Read the JSON
             try:
                 with open(json_path, "r") as f:
