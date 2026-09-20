@@ -17,6 +17,8 @@ import numpy as np
 import math
 import json
 
+from SoxsRBFTools.python import Const
+
 
 def mayaMainWindow():
     mainWindowPtr = omui.MQtUtil.mainWindow()
@@ -25,7 +27,8 @@ def mayaMainWindow():
 
 class RBFManager(QtWidgets.QDialog):
 
-    UI_FILE = r"Z:\Projects\MayaScripts\SimonsSandbox\RBFManagerWidget.ui"
+    # UI_FILE = r"C:\Users\Simon\Documents\maya\scripts\RBFManagementTools\ui\RBFManagerWidget.ui"
+    UI_FILE = Const.UI_DIR + "RBFManagerWidget.ui"
 
     FILE_FILTERS = "JSON (*.json)"
     SELECTED_FILTER = "JSON (*.json)"
@@ -34,6 +37,8 @@ class RBFManager(QtWidgets.QDialog):
 
     def __init__(self, parent=mayaMainWindow()):
         super().__init__(parent)
+
+        print("TEST: " + self.UI_FILE)
 
         self.setWindowTitle("RBF Manager Tool")
         self.setMinimumSize(400, 480)
