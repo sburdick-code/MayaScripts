@@ -17,7 +17,10 @@ import numpy as np
 import math
 import json
 
-from SoxsRBFTools.python import Const
+try:
+    from Tools.SoxsRBFTools.python import Const
+except:
+    from SoxsRBFTools.python import Const
 
 
 def mayaMainWindow():

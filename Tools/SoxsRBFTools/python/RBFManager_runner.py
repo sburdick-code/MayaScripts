@@ -1,4 +1,7 @@
-from SoxsRBFTools.python.RBFManager import RBFManager
+try:
+    from Tools.SoxsRBFTools.python.RBFManager import RBFManager
+except:
+    from SoxsRBFTools.python.RBFManager import RBFManager
 
 if __name__ == "__main__":
     try:

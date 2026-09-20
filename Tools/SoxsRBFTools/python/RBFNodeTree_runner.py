@@ -1,4 +1,7 @@
-from SoxsRBFTools.python.RBFNodeTree import RBFNodeTree
+try:
+    from Tools.SoxsRBFTools.python.RBFNodeTree import RBFNodeTree
+except:
+    from SoxsRBFTools.python.RBFNodeTree import RBFNodeTree
 
 if __name__ == "__main__":
     try:

@@ -1,3 +1,10 @@
+"""
+NOTE: This one is for packaging only. If you need to make edits, please work on the 
+SoxsRBF.py in the plug-ins dir and migrate changes over here.
+
+"""
+
+
 import maya.api.OpenMaya as om
 import maya.cmds
 import numpy as np
