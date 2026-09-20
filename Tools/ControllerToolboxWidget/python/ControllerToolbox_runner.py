@@ -1,4 +1,4 @@
-from Tools.ControllerToolboxWidget.ControllerToolbox import ControllerToolbox
+from Tools.ControllerToolboxWidget.python.ControllerToolbox import ControllerToolbox
 
 if __name__ == "__main__":
     try:

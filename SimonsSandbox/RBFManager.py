@@ -11,6 +11,7 @@ import maya.OpenMaya as om
 import maya.OpenMayaUI as omui
 import maya.cmds as cmds
 
+import sys
 import os
 import numpy as np
 import math
@@ -38,6 +39,10 @@ class RBFManager(QtWidgets.QDialog):
         self.setMinimumSize(400, 480)
         self.resize(400, 480)
         self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
+
+        # On macOS make the window a Tool to keep it on top of Maya
+        if sys.platform == "darwin":
+            self.setWindowFlag(QtCore.Qt.Tool, True)
 
         self.initUI()
         self.createConnections()
@@ -327,7 +332,7 @@ class RBFManager(QtWidgets.QDialog):
             drivenData = self.getAllDataFromTable(self.Driven_Table_Model)
             driverMtrx = np.array(driverData)
             drivenMtrx = np.array(drivenData)
-            weights = RBFCalc.calculate_weights_matrix(
+            weights = RBFCalc.calculateWeightMatrix(
                 driverMtrx, drivenMtrx, kernel_index
             )
 
@@ -344,6 +349,7 @@ class RBFManager(QtWidgets.QDialog):
                 }
             }
 
+            # If json does not yet, create a new empty file
             if not os.path.isfile(json_path):
                 with open(json_path, "w") as f:
                     f.write("")
@@ -355,13 +361,19 @@ class RBFManager(QtWidgets.QDialog):
                     try:
                         fileData = json.load(f)
 
+                        print("Writing File Data to Json")
+
                         # edit fileData's values and update to the set ones
-                        fileData[ID]["setup"] = attributeData
-                        fileData[ID]["inputs"] = driverData
-                        fileData[ID]["outputs"] = drivenData
-                        fileData[ID]["weights"] = weights.tolist()
+                        data = {}
+                        data["setup"] = attributeData
+                        data["inputs"] = driverData
+                        data["outputs"] = drivenData
+                        data["weights"] = weights.tolist()
+
+                        fileData[ID] = data
 
                     except:
+                        print("Failed write, override time. All new file data time")
                         fileData = writeData
 
             except FileNotFoundError:
@@ -584,9 +596,11 @@ class RBFManager(QtWidgets.QDialog):
             # Clean up the data from the JSON
             json_path = cmds.getAttr(f"{node}.RBF_DataPath")
 
-            with open(json_path, "r+") as f:
+            with open(json_path, "r") as f:
                 file_data = json.load(f)
                 file_data.pop(id)
+
+            with open(json_path, "w") as f:
                 json.dump(file_data, f)
 
             # Delete the node itself
@@ -796,79 +810,142 @@ class RBFManager(QtWidgets.QDialog):
 
 
 class RBFCalc:
-    # Calculate the Weight matrix
+
     @staticmethod
-    def calculate_weights_matrix(input_mtrx, output_mtrx, beta):
-        dist_mtrx = RBFCalc.calc_distance_matrix(input_mtrx)
-        phi = RBFCalc.rbf(dist_mtrx, beta)
-        weight_mtrx = np.linalg.solve(phi, output_mtrx)
+    def calculateWeightMatrix(inputMtrx, outputMtrx, beta):
+        """Calculates the weight matrix for the RBF node.
 
-        return weight_mtrx
+        Args:
+            inputMtrx (np.array): Matrix of inputs to train the weights
+            outputMtrx (np.array): Matrix of target outputs to train the weights
+            beta (int): This is the power the rbf is raised by
 
-    # Distance
+        Returns:
+            A matrix of weights calculated from the distance
+        """
+        distMtrx = RBFCalc.calculateDistanceMatrix(inputMtrx)
+        phi = RBFCalc.rbf(distMtrx, beta)
+        weightMtrx = np.linalg.solve(phi, outputMtrx)
+
+        return weightMtrx
+
     @staticmethod
     def distance(p1, p2):
+        """Calculate the distance between point1 and point2. Points can be passed as
+        lists or 2 individual points.
+
+        Args:
+            p1: point1
+            p2: point2
+
+        Returns:
+            The distance between the two points.
+        """
         return math.sqrt(sum([(a - b) ** 2 for a, b in zip(p1, p2)]))
 
-    # RBF Solver
     @staticmethod
     def rbf(r, beta):
-        return r**beta
+        """Calculates Phi using a polyharmonic spline.
 
-    # Training
+        Args:
+            r: The value to be calculated.
+            beta: the exponent of the polyharmonic spline function.
+
+        Returns:
+            The calculated Phi.
+        """
+        if beta % 2 == 0:
+            rSafe = np.where(
+                r > 0, r, 1.0
+            )  # r cannot be 0 when used in log, so make a safe value
+            phi = (r**beta) * np.log(rSafe)
+            return np.where(r > 0, phi, 0.0)
+        else:
+            return r**beta
+
     @staticmethod
-    def calc_distance_matrix(p_matrix):
-        dist_matrix = np.zeros([len(p_matrix), len(p_matrix)])
+    def calculateDistanceMatrix(posMtrx):
+        """Calculate the distance between all points in the position matrix
 
-        for x in range(len(p_matrix)):
-            for y in range(len(p_matrix)):
-                dist_matrix[x][y] = RBFCalc.distance(p_matrix[x], p_matrix[y])
+        Args:
+            posMtrx: The given position matrix
 
-        return dist_matrix
+        Returns:
+            The calculated distance matrix
+        """
+        distMtrx = np.zeros([len(posMtrx), len(posMtrx)])
 
-    # Evaluation
+        for x in range(len(posMtrx)):
+            for y in range(len(posMtrx)):
+                distMtrx[x][y] = RBFCalc.distance(posMtrx[x], posMtrx[y])
+
+        return distMtrx
+
     @staticmethod
-    def evaluate_rbf(q, pos_mtrx, weight_mtrx):
-        q_phi = np.zeros(len(pos_mtrx))
+    def evaluateRBF(q, posMtrx, weightMtrx, beta):
+        """Evaluates the RBF. This solves the set resultant output by calculating
+        the weights against the position matrix using the rbf function.
 
-        for i in range(len(q_phi)):
-            dist = RBFCalc.distance(q, pos_mtrx[i])
-            q_phi[i] = RBFCalc.rbf(dist)
+        Args:
+            q: the current position
+            posMtrx: the position matrix containing keys for the data set
+            weightMtrx: the weights that were trained on the positions
+            beta: the exponent for the rbf solver
 
-        result = np.dot(q_phi, weight_mtrx)
+        Returns:
+            The output result determined by the current position, weights and position matrix.
+        """
+        qPhi = np.zeros(len(posMtrx))
+
+        for i in range(len(qPhi)):
+            dist = RBFCalc.distance(q, posMtrx[i])
+            qPhi[i] = RBFCalc.rbf(dist, beta)
+
+        result = np.dot(qPhi, weightMtrx)
         return result
 
     @staticmethod
-    def format_RBF_string(input_mtrx, output_mtrx, weight_mtrx, unique_id):
+    def formatRBFString(inputMtrx, outputMtrx, weightMtrx, uniqueId):
+        """Formats the RBF data in an organized dictionary to be written to a file.
+
+        Args:
+            inputMtrx: The matrix of input/driver values for the RBF
+            outputMtrx: The matrix of output/target values for the driven object
+            weightMtrx: The trained weights that evaluate the inputs and outputs
+            uniqueId: A unique string to help distinguish this collection of data
+
+        Returns:
+            A dictionary of the passed in data, all data formatted into strings.
+        """
         # format strings
-        p_array_string = np.array2string(input_mtrx, separator=",")
-        p_formatted_string = (
-            p_array_string.replace("\n", "")
+        pArrayString = np.array2string(inputMtrx, separator=",")
+        pFormattedString = (
+            pArrayString.replace("\n", "")
             .replace(" ", "")
             .replace("0.", "0.0")
             .replace("1.", "1.0")
         )
-        o_array_string = np.array2string(output_mtrx, separator=",")
-        o_formatted_string = (
-            o_array_string.replace("\n", "")
+        oArrayString = np.array2string(outputMtrx, separator=",")
+        oFormattedString = (
+            oArrayString.replace("\n", "")
             .replace(" ", "")
             .replace("0.", "0.0")
             .replace("1.", "1.0")
         )
-        w_array_string = np.array2string(weight_mtrx, separator=",")
-        w_formatted_string = (
-            w_array_string.replace("\n", "").replace(" ", "").replace("0.", "0.0")
+        wArrayString = np.array2string(weightMtrx, separator=",")
+        wFormattedString = (
+            wArrayString.replace("\n", "").replace(" ", "").replace("0.", "0.0")
         )
 
-        out = f'"i_{unique_id}":{p_formatted_string},"o_{unique_id}":{o_formatted_string},"w_{unique_id}":{w_formatted_string}'
+        out = f'"i_{uniqueId}":{pFormattedString},"o_{uniqueId}":{oFormattedString},"w_{uniqueId}":{wFormattedString}'
 
-        out_dict = {
-            f"i_{unique_id}": input_mtrx.tolist(),
-            f"o_{unique_id}": output_mtrx.tolist(),
-            f"w_{unique_id}": weight_mtrx.tolist(),
+        outDict = {
+            f"i_{uniqueId}": inputMtrx.tolist(),
+            f"o_{uniqueId}": outputMtrx.tolist(),
+            f"w_{uniqueId}": weightMtrx.tolist(),
         }
 
-        return out_dict
+        return outDict
 
 
 if __name__ == "__main__":

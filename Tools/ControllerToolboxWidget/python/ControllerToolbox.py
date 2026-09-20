@@ -12,9 +12,9 @@ import os
 import maya.OpenMayaUI as omui
 import maya.cmds as cmds
 
-from Tools.ControllerToolboxWidget.Const import Const
-from Tools.ControllerToolboxWidget import curveTools
-from Tools.ControllerToolboxWidget.HelperDialogs import (
+from Tools.ControllerToolboxWidget.python.Const import Const
+from Tools.ControllerToolboxWidget.python import curveTools
+from Tools.ControllerToolboxWidget.python.HelperDialogs import (
     CreateNewCurveDialog,
     RenameDialog,
 )

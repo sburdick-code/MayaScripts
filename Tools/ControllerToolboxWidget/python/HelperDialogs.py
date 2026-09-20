@@ -10,8 +10,8 @@ import os
 import maya.cmds as cmds
 import json
 
-from Tools.ControllerToolboxWidget.Const import Const
-from Tools.ControllerToolboxWidget import curveTools
+from Tools.ControllerToolboxWidget.python.Const import Const
+from Tools.ControllerToolboxWidget.python import curveTools
 
 
 class CreateNewCurveDialog(QtWidgets.QDialog):

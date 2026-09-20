@@ -64,6 +64,8 @@ class SoxsRBFNode(om.MPxNode):
 
     def compute(self, plug, data):
 
+        print("Updating")
+
         # Get Attributes
         input_handle = data.inputValue(SoxsRBFNode.input_obj)
         in_x = input_handle.child(SoxsRBFNode.in_x_obj).asDouble()
@@ -195,15 +197,19 @@ class SoxsRBFNode(om.MPxNode):
 
         for i in range(len(in_phi)):
             dist = self.euclidean_distance(pos, in_matrix[i])
-            in_phi[i] = dist**beta
+            in_phi[i] = self.rbf(dist, beta)
 
         result = np.dot(in_phi, weight_matrix)
 
-        # HACKY PATCH! Idk why this works :(
-        # if beta < 3:
-        # result *= 10
-
         return result
+
+    def rbf(self, r, beta):
+        if beta % 2 == 0:
+            rSafe = np.where(r > 0, r, 1.0)  # r cannot be 0
+            phi = (r**beta) * np.log(rSafe)
+            return np.where(r > 0, phi, 0.0)
+        else:
+            return r**beta
 
     @staticmethod
     def euclidean_distance(p1, p2):

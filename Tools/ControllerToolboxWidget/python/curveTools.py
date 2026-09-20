@@ -3,7 +3,7 @@ import maya.api.OpenMaya as om
 import maya.cmds as cmds
 import json
 
-from Tools.ControllerToolboxWidget.Const import Const
+from Tools.ControllerToolboxWidget.python.Const import Const
 
 
 def save_curve(obj, curve_name, parent_widget):
