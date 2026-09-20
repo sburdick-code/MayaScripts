@@ -1,6 +1,5 @@
 # ignore the __pycache__ folder
 __pycache__/
-Tutorials/
 SimonsSandbox/
 CharacterRigging/
 movies/
